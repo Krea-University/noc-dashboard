@@ -1,0 +1,27 @@
+# Multi-stage Docker build for KREA IT NOC Go Backend
+FROM golang:alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+COPY backend/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /krea-noc ./cmd/server
+
+# Final runtime image
+FROM alpine:3.20
+
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates tzdata
+ENV TZ=Asia/Kolkata
+
+COPY --from=builder /krea-noc /app/krea-noc
+COPY backend/migrations /app/migrations
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/krea-noc"]
