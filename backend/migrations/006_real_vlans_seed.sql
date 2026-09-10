@@ -1,7 +1,10 @@
 -- KREA IT Operations Command Center
--- Migration 003: Campus VLAN Infrastructure Seed Data
+-- Migration 006: Purge Legacy Mock VLANs & Seed Real Krea Infrastructure VLANs
 
--- VLANs (Real KREA Campus Subnets & FortiGate Firewall Policies)
+-- 1. Remove legacy mock VLAN records
+DELETE FROM vlans WHERE id IN ('vlan_110', 'vlan_120', 'vlan_130', 'vlan_140', 'vlan_150');
+
+-- 2. Insert real Krea University VLAN segments mapped directly to FortiGate firewall policies
 INSERT INTO vlans (
     id, vlan_id, name, description, subnet, gateway, internet_status, 
     fortigate_policy_id, expected_endpoints, expected_aps, expected_classrooms, 

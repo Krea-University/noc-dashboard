@@ -1,15 +1,39 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldCheck, Lock, User, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { api } from '../../api/client';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Safely parse redirect query parameter (disallowing protocol-relative URLs)
+  const rawRedirect = searchParams.get('redirect');
+  const redirectTarget =
+    rawRedirect && rawRedirect.startsWith('/') && !rawRedirect.startsWith('//')
+      ? rawRedirect
+      : '/noc';
+
+  // If already authenticated, redirect immediately
+  const { data: meData } = useQuery({
+    queryKey: ['me'],
+    queryFn: api.getMe,
+    staleTime: 30000,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (meData?.user) {
+      navigate(redirectTarget, { replace: true });
+    }
+  }, [meData, navigate, redirectTarget]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +42,8 @@ export const LoginPage: React.FC = () => {
 
     try {
       await api.login(username, password);
-      navigate('/noc');
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      navigate(redirectTarget, { replace: true });
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMsg(err.message);

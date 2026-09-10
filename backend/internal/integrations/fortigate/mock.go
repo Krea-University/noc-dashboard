@@ -1,4 +1,4 @@
-﻿package fortigate
+package fortigate
 
 import (
 	"context"
@@ -64,34 +64,76 @@ func (m *MockProvider) GetVlans(ctx context.Context) ([]models.VLAN, error) {
 
 	return []models.VLAN{
 		{
-			VlanID: 110, Name: "Faculty & Staff", Description: "Academic and administrative staff workstations & secure Wi-Fi",
-			Subnet: "10.110.0.0/20", Gateway: "10.110.0.1", FortiGatePolicyID: 1101,
-			ExpectedEndpoints: 420, ExpectedAPs: 24, ExpectedClassrooms: 18,
-			InternetStatus: m.getInternetStatus(1101),
+			VlanID: 160, Name: "Student Wi-Fi", Description: "Student personal devices & hostel/academic Wi-Fi",
+			Subnet: "10.10.160.0/20", Gateway: "10.10.160.1", FortiGatePolicyID: 38,
+			ExpectedEndpoints: 850, ExpectedAPs: 58, ExpectedClassrooms: 24,
+			InternetStatus: m.getInternetStatus(38),
 		},
 		{
-			VlanID: 120, Name: "Students", Description: "Hostel and classroom student personal devices & BYOD",
-			Subnet: "10.120.0.0/19", Gateway: "10.120.0.1", FortiGatePolicyID: 1201,
-			ExpectedEndpoints: 850, ExpectedAPs: 48, ExpectedClassrooms: 24,
-			InternetStatus: m.getInternetStatus(1201),
+			VlanID: 72, Name: "Staff Wi-Fi", Description: "Administrative and operational staff wireless access",
+			Subnet: "10.10.72.0/22", Gateway: "10.10.72.1", FortiGatePolicyID: 37,
+			ExpectedEndpoints: 120, ExpectedAPs: 26, ExpectedClassrooms: 12,
+			InternetStatus: m.getInternetStatus(37),
 		},
 		{
-			VlanID: 130, Name: "Computer Labs", Description: "Academic computer science & research laboratory systems",
-			Subnet: "10.130.0.0/22", Gateway: "10.130.0.1", FortiGatePolicyID: 1301,
-			ExpectedEndpoints: 160, ExpectedAPs: 4, ExpectedClassrooms: 6,
-			InternetStatus: m.getInternetStatus(1301),
+			VlanID: 76, Name: "Faculty Wi-Fi", Description: "Academic faculty & research cabin wireless access",
+			Subnet: "10.10.76.0/22", Gateway: "10.10.76.1", FortiGatePolicyID: 33,
+			ExpectedEndpoints: 95, ExpectedAPs: 20, ExpectedClassrooms: 14,
+			InternetStatus: m.getInternetStatus(33),
 		},
 		{
-			VlanID: 140, Name: "Campus Guests", Description: "Visitor self-registered wireless internet access",
-			Subnet: "10.140.0.0/22", Gateway: "10.140.0.1", FortiGatePolicyID: 1401,
-			ExpectedEndpoints: 85, ExpectedAPs: 16, ExpectedClassrooms: 0,
-			InternetStatus: m.getInternetStatus(1401),
+			VlanID: 68, Name: "Guest Wi-Fi", Description: "Visitor & event guest portal wireless access",
+			Subnet: "10.10.68.0/23", Gateway: "10.10.68.1", FortiGatePolicyID: 36,
+			ExpectedEndpoints: 50, ExpectedAPs: 18, ExpectedClassrooms: 0,
+			InternetStatus: m.getInternetStatus(36),
 		},
 		{
-			VlanID: 150, Name: "IoT & Biometrics", Description: "Campus biometric readers, IP cameras and environmental sensors",
-			Subnet: "10.150.0.0/23", Gateway: "10.150.0.1", FortiGatePolicyID: 1501,
-			ExpectedEndpoints: 65, ExpectedAPs: 0, ExpectedClassrooms: 0,
-			InternetStatus: m.getInternetStatus(1501),
+			VlanID: 17, Name: "Main Block DS Lab", Description: "Main Block 1st Floor Data Science research laboratory",
+			Subnet: "10.10.17.0/24", Gateway: "10.10.17.1", FortiGatePolicyID: 24,
+			ExpectedEndpoints: 29, ExpectedAPs: 2, ExpectedClassrooms: 1,
+			InternetStatus: m.getInternetStatus(24),
+		},
+		{
+			VlanID: 16, Name: "MB Trading Lab", Description: "Financial trading lab & economics computer systems",
+			Subnet: "10.10.16.0/24", Gateway: "10.10.16.1", FortiGatePolicyID: 70,
+			ExpectedEndpoints: 60, ExpectedAPs: 2, ExpectedClassrooms: 1,
+			InternetStatus: m.getInternetStatus(70),
+		},
+		{
+			VlanID: 18, Name: "Library Systems", Description: "Central Library digital commons and catalog workstations",
+			Subnet: "10.10.18.0/23", Gateway: "10.10.18.1", FortiGatePolicyID: 26,
+			ExpectedEndpoints: 14, ExpectedAPs: 8, ExpectedClassrooms: 0,
+			InternetStatus: m.getInternetStatus(26),
+		},
+		{
+			VlanID: 24, Name: "Campus Biometrics", Description: "Campus biometric attendance readers & access control",
+			Subnet: "10.10.24.0/24", Gateway: "10.10.24.1", FortiGatePolicyID: 29,
+			ExpectedEndpoints: 66, ExpectedAPs: 0, ExpectedClassrooms: 0,
+			InternetStatus: m.getInternetStatus(29),
+		},
+		{
+			VlanID: 64, Name: "Events Wi-Fi", Description: "Auditorium, seminar halls and special campus events",
+			Subnet: "10.10.64.0/22", Gateway: "10.10.64.1", FortiGatePolicyID: 35,
+			ExpectedEndpoints: 150, ExpectedAPs: 14, ExpectedClassrooms: 4,
+			InternetStatus: m.getInternetStatus(35),
+		},
+		{
+			VlanID: 88, Name: "Exam Wi-Fi", Description: "Dedicated academic examination and testing network",
+			Subnet: "10.10.88.0/21", Gateway: "10.10.88.1", FortiGatePolicyID: 34,
+			ExpectedEndpoints: 300, ExpectedAPs: 22, ExpectedClassrooms: 16,
+			InternetStatus: m.getInternetStatus(34),
+		},
+		{
+			VlanID: 14, Name: "Main Block LAN", Description: "Main academic block wired ethernet workstations",
+			Subnet: "10.10.14.0/23", Gateway: "10.10.14.1", FortiGatePolicyID: 25,
+			ExpectedEndpoints: 37, ExpectedAPs: 0, ExpectedClassrooms: 8,
+			InternetStatus: m.getInternetStatus(25),
+		},
+		{
+			VlanID: 20, Name: "New Academic LAN", Description: "New academic building wired ethernet workstations",
+			Subnet: "10.10.20.0/23", Gateway: "10.10.20.1", FortiGatePolicyID: 22,
+			ExpectedEndpoints: 34, ExpectedAPs: 0, ExpectedClassrooms: 10,
+			InternetStatus: m.getInternetStatus(22),
 		},
 	}, nil
 }

@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"encoding/json"
@@ -1158,6 +1158,23 @@ func handleListVLANs(deps *RouterDeps) http.HandlerFunc {
 		}
 		defer rows.Close()
 
+		// Query live endpoint counts grouped by 3rd octet for quick subnet mapping
+		liveCounts := make(map[string]int)
+		epRows, epErr := deps.DB.Query("SELECT SUBSTRING_INDEX(ip_address, '.', 3), COUNT(*) FROM endpoints WHERE ip_address LIKE '10.10.%' GROUP BY SUBSTRING_INDEX(ip_address, '.', 3)")
+		if epErr == nil {
+			for epRows.Next() {
+				var sub string
+				var cnt int
+				if err := epRows.Scan(&sub, &cnt); err == nil {
+					liveCounts[sub] = cnt
+				}
+			}
+			epRows.Close()
+		}
+
+		var bioCount int
+		_ = deps.DB.QueryRow("SELECT COUNT(*) FROM devices WHERE category_code = 'BIOMETRIC'").Scan(&bioCount)
+
 		var vlans []models.VLAN
 		for rows.Next() {
 			var v models.VLAN
@@ -1169,6 +1186,19 @@ func handleListVLANs(deps *RouterDeps) http.HandlerFunc {
 			if jobID != nil {
 				v.LastActionJobID = *jobID
 			}
+
+			// Reflect live discovered endpoint count if higher than or matching live scan
+			if v.VlanID == 24 && bioCount > 0 {
+				v.ExpectedEndpoints = bioCount
+			} else {
+				subKey := fmt.Sprintf("10.10.%d", v.VlanID)
+				if cnt, ok := liveCounts[subKey]; ok && cnt > 0 {
+					if cnt > v.ExpectedEndpoints {
+						v.ExpectedEndpoints = cnt
+					}
+				}
+			}
+
 			vlans = append(vlans, v)
 		}
 		respondJSON(w, http.StatusOK, vlans)

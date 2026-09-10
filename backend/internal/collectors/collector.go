@@ -1,4 +1,4 @@
-﻿package collectors
+package collectors
 
 import (
 	"context"
@@ -309,13 +309,13 @@ func (m *CollectorManager) syncFortiGate() {
 	vlans, err := m.fgProvider.GetVlans(ctx)
 	if err == nil {
 		for _, v := range vlans {
-			// Map well-known FortiGate policies to local VLAN records
-			if v.FortiGatePolicyID == 38 || strings.EqualFold(v.Name, "Student-WiFi") {
-				_, _ = m.db.Exec("UPDATE vlans SET internet_status = ?, fortigate_policy_id = 38, updated_at = ? WHERE vlan_id = 120",
-					v.InternetStatus, now)
-			} else if v.FortiGatePolicyID == 37 || strings.EqualFold(v.Name, "Staff-WiFi") {
-				_, _ = m.db.Exec("UPDATE vlans SET internet_status = ?, fortigate_policy_id = 37, updated_at = ? WHERE vlan_id = 110",
-					v.InternetStatus, now)
+			// Update matching VLAN record by FortiGate policy ID or VLAN ID
+			if v.FortiGatePolicyID > 0 {
+				_, _ = m.db.Exec(`
+					UPDATE vlans 
+					SET internet_status = ?, updated_at = ? 
+					WHERE fortigate_policy_id = ?`,
+					v.InternetStatus, now, v.FortiGatePolicyID)
 			} else if v.VlanID > 0 {
 				_, _ = m.db.Exec("UPDATE vlans SET internet_status = ?, updated_at = ? WHERE vlan_id = ?",
 					v.InternetStatus, now, v.VlanID)
