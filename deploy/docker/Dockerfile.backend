@@ -3,8 +3,6 @@ FROM golang:alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache git ca-certificates tzdata
-
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
@@ -16,7 +14,9 @@ FROM alpine:3.20
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata
+# Copy root CA certificates from builder stage (avoids external apk CDN network calls)
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
 ENV TZ=Asia/Kolkata
 
 COPY --from=builder /krea-noc /app/krea-noc

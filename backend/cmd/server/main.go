@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/Krea-University/noc-dashboard/backend/internal/api"
 	"github.com/Krea-University/noc-dashboard/backend/internal/audit"
