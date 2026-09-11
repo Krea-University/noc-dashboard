@@ -36,7 +36,7 @@ export const Sidebar: React.FC<Props> = ({
     { label: 'Wireless (APs)', to: '/noc/network?category=WIRELESS_AP', icon: Wifi },
     { label: 'Endpoints', to: '/noc/endpoints', icon: Laptop },
     { label: 'Biometric Devices', to: '/noc/biometrics', icon: Fingerprint },
-    { label: 'Maps', to: '/noc/vlan', icon: MapPin },
+    { label: 'VLAN Manager', to: '/noc/vlan', icon: Layers },
     {
       label: 'Alarms',
       to: '/noc/alarms',

@@ -379,7 +379,10 @@ export const OverviewPage: React.FC = () => {
   // Compute live severity counts from incidents and alarms
   const severityCounts = useMemo(() => {
     let critical = 0, major = 0, warning = 0, info = 0;
-    (displayIncidents || []).forEach((inc: any) => {
+    const activeIncidents = (displayIncidents || []).filter(
+      (inc: any) => inc.status === 'OPEN' || inc.status === 'INVESTIGATING'
+    );
+    activeIncidents.forEach((inc: any) => {
       const s = (inc.severity || '').toUpperCase();
       if (s === 'CRITICAL') critical++;
       else if (s === 'MAJOR') major++;
@@ -387,13 +390,15 @@ export const OverviewPage: React.FC = () => {
       else info++;
     });
     if (critical === 0 && major === 0 && (alarms || []).length > 0) {
-      (alarms || []).forEach((a: any) => {
-        const s = (a.severity || '').toUpperCase();
-        if (s === 'CRITICAL') critical++;
-        else if (s === 'MAJOR') major++;
-        else if (s === 'WARNING') warning++;
-        else info++;
-      });
+      (alarms || [])
+        .filter((a: any) => !a.acknowledged && !a.cleared)
+        .forEach((a: any) => {
+          const s = (a.severity || '').toUpperCase();
+          if (s === 'CRITICAL') critical++;
+          else if (s === 'MAJOR') major++;
+          else if (s === 'WARNING') warning++;
+          else info++;
+        });
     }
     return { critical, major, warning, info };
   }, [displayIncidents, alarms]);

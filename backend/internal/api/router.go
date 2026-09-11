@@ -370,9 +370,15 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'ILL' OR type LIKE '%Leased Line%'").
 			Scan(&summary.ILLTotal, &summary.ILLUp)
 
-		// Query servers
+		// Query servers (SNMP monitored appliances + real server workloads from Endpoint Central)
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'SERVER'").
 			Scan(&summary.ServersTotal, &summary.ServersUp, &summary.ServersDown)
+		var epSrvTotal, epSrvOnline, epSrvOffline int
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status!='ONLINE' THEN 1 ELSE 0 END), 0) FROM endpoints WHERE os_name LIKE '%Server%'").
+			Scan(&epSrvTotal, &epSrvOnline, &epSrvOffline)
+		summary.ServersTotal += epSrvTotal
+		summary.ServersUp += epSrvOnline
+		summary.ServersDown += epSrvOffline
 
 		// Query biometrics
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'BIOMETRIC'").
@@ -382,8 +388,8 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='OFFLINE' THEN 1 ELSE 0 END), 0) FROM endpoints").
 			Scan(&summary.EndpointsTotal, &summary.EndpointsOnline, &summary.EndpointsOffline)
 
-		// Query alarms & incidents
-		_ = deps.DB.QueryRow("SELECT SUM(CASE WHEN severity='CRITICAL' THEN 1 ELSE 0 END), SUM(CASE WHEN severity='MAJOR' THEN 1 ELSE 0 END) FROM alarms WHERE cleared = 0").
+		// Query active unacknowledged alarms
+		_ = deps.DB.QueryRow("SELECT COALESCE(SUM(CASE WHEN severity='CRITICAL' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN severity='MAJOR' THEN 1 ELSE 0 END), 0) FROM alarms WHERE cleared = 0 AND acknowledged = 0").
 			Scan(&summary.ActiveCriticalAlarms, &summary.ActiveMajorAlarms)
 		_ = deps.DB.QueryRow("SELECT COUNT(*) FROM incidents WHERE status IN ('OPEN','ACKNOWLEDGED','INVESTIGATING')").
 			Scan(&summary.ActiveIncidents)
@@ -532,8 +538,8 @@ func handleGetDevice(deps *RouterDeps) http.HandlerFunc {
 			}
 		}
 
-		// Fetch active alarms
-		aRows, _ := deps.DB.Query("SELECT id, source_id, source_system, device_id, device_name, device_ip, severity, message, entity, first_seen_at, last_seen_at, acknowledged, cleared FROM alarms WHERE device_id = ? AND cleared = 0", dev.ID)
+		// Fetch active unacknowledged alarms
+		aRows, _ := deps.DB.Query("SELECT id, source_id, source_system, device_id, device_name, device_ip, severity, message, entity, first_seen_at, last_seen_at, acknowledged, cleared FROM alarms WHERE device_id = ? AND cleared = 0 AND acknowledged = 0", dev.ID)
 		if aRows != nil {
 			defer aRows.Close()
 			for aRows.Next() {
@@ -1035,7 +1041,7 @@ func handleListAlarms(deps *RouterDeps) http.HandlerFunc {
 			args = append(args, sev)
 		}
 		if cleared == "false" || cleared == "0" || status == "active" {
-			query += " AND cleared = 0 AND severity != 'CLEAR'"
+			query += " AND cleared = 0 AND acknowledged = 0 AND severity != 'CLEAR'"
 		}
 		query += " ORDER BY last_seen_at DESC LIMIT 100"
 
@@ -1062,16 +1068,30 @@ func handleAcknowledgeAlarm(deps *RouterDeps) http.HandlerFunc {
 		user := rbac.GetUserFromContext(r.Context())
 		now := time.Now().UTC()
 
-		_, err := deps.DB.Exec("UPDATE alarms SET acknowledged = 1, acknowledged_by = ?, acknowledged_at = ? WHERE id = ?",
-			user.Username, now, id)
+		username := "operator"
+		userID := "system"
+		if user != nil {
+			username = user.Username
+			userID = user.ID
+		}
+
+		_, err := deps.DB.Exec(`
+			UPDATE alarms 
+			SET acknowledged = 1, 
+			    acknowledged_by = ?, 
+			    acknowledged_at = ?,
+			    cleared = 1,
+			    cleared_at = COALESCE(cleared_at, ?)
+			WHERE id = ?`,
+			username, now, now, id)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed acknowledging alarm")
 			return
 		}
 
 		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
-			UserID:    user.ID,
-			Username:  user.Username,
+			UserID:    userID,
+			Username:  username,
 			Action:    "ALARM_ACKNOWLEDGED",
 			TargetID:  id,
 			Result:    "SUCCESS",
@@ -1079,7 +1099,11 @@ func handleAcknowledgeAlarm(deps *RouterDeps) http.HandlerFunc {
 			UserAgent: r.UserAgent(),
 		})
 
-		deps.WSHub.Broadcast("ALARM_UPDATED", map[string]interface{}{"alarm_id": id, "acknowledged": true})
+		deps.WSHub.Broadcast("ALARM_UPDATED", map[string]interface{}{
+			"alarm_id":     id,
+			"acknowledged": true,
+			"cleared":      true,
+		})
 		respondJSON(w, http.StatusOK, map[string]string{"status": "acknowledged"})
 	}
 }

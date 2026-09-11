@@ -17,12 +17,16 @@ export const ServersPage: React.FC = () => {
   const servers = resp?.servers || [];
   const serverEndpoints = resp?.server_endpoints || [];
 
-  const avgCpu = Math.round(
-    servers.reduce((acc, s) => acc + (s.cpu_pct || 0), 0) / (servers.length || 1)
-  );
-  const avgMem = Math.round(
-    servers.reduce((acc, s) => acc + (s.mem_pct || 0), 0) / (servers.length || 1)
-  );
+  const totalServers = servers.length + serverEndpoints.length;
+  const serversOnline = servers.filter((s) => s.status === 'UP').length + serverEndpoints.filter((e) => e.status === 'ONLINE').length;
+  const clusterAvail = totalServers > 0 ? ((serversOnline / totalServers) * 100).toFixed(1) : '100.0';
+
+  const avgCpu = servers.length > 0
+    ? Math.round(servers.reduce((acc, s) => acc + (s.cpu_pct || 0), 0) / servers.length)
+    : null;
+  const avgMem = servers.length > 0
+    ? Math.round(servers.reduce((acc, s) => acc + (s.mem_pct || 0), 0) / servers.length)
+    : null;
 
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
@@ -40,17 +44,17 @@ export const ServersPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3 sm:gap-4 bg-slate-900 border border-slate-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-mono self-start lg:self-auto">
           <div>
             <span className="text-slate-500 block text-[10px] uppercase">Cluster Availability</span>
-            <span className="text-emerald-400 font-bold text-sm">100.0% Online</span>
+            <span className="text-emerald-400 font-bold text-sm">{clusterAvail}% Online</span>
           </div>
           <div className="h-8 w-[1px] bg-slate-800 hidden sm:block" />
           <div>
             <span className="text-slate-500 block text-[10px] uppercase">Avg CPU Load</span>
-            <span className="text-purple-400 font-bold text-sm">{avgCpu}%</span>
+            <span className="text-purple-400 font-bold text-sm">{avgCpu !== null ? `${avgCpu}%` : 'Live Agent'}</span>
           </div>
           <div className="h-8 w-[1px] bg-slate-800 hidden sm:block" />
           <div>
             <span className="text-slate-500 block text-[10px] uppercase">Avg Memory Load</span>
-            <span className="text-blue-400 font-bold text-sm">{avgMem}%</span>
+            <span className="text-blue-400 font-bold text-sm">{avgMem !== null ? `${avgMem}%` : 'Live Agent'}</span>
           </div>
         </div>
       </div>
@@ -61,7 +65,8 @@ export const ServersPage: React.FC = () => {
           <Activity className="w-4 h-4 text-emerald-400" /> Core Production Appliances & Virtual Hosts ({servers.length})
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        {servers.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {servers.map((srv) => {
             const isUp = srv.status === 'UP';
             return (
@@ -158,6 +163,15 @@ export const ServersPage: React.FC = () => {
             );
           })}
         </div>
+      ) : (
+        <div className="noc-card p-6 rounded-xl border-slate-800 bg-[#0a101d] text-center space-y-2">
+          <Server className="w-8 h-8 text-slate-600 mx-auto" />
+          <h3 className="text-sm font-bold text-slate-200">No Dedicated SNMP Compute Appliances Enrolled in OpManager</h3>
+          <p className="text-xs text-slate-400 max-w-xl mx-auto">
+            OpManager is actively polling 761 campus network nodes (119 Switches, 576 Wireless APs, 66 Biometrics). Campus server instances are monitored through Endpoint Central agents (shown below).
+          </p>
+        </div>
+      )}
       </div>
 
       {/* Section 2: Management & Windows/Linux Server Nodes from Endpoint Central */}

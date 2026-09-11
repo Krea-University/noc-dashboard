@@ -362,9 +362,11 @@ func (m *CollectorManager) upsertAlarm(dto integrations.AlarmDTO, now time.Time)
 	} else {
 		updateSQL := `
 		UPDATE alarms
-		SET severity = ?, message = ?, last_seen_at = ?, cleared = ?, cleared_at = ?
+		SET severity = ?, message = ?, last_seen_at = ?, 
+		    cleared = CASE WHEN acknowledged = 1 THEN 1 ELSE ? END, 
+		    cleared_at = CASE WHEN acknowledged = 1 THEN COALESCE(cleared_at, ?) ELSE ? END
 		WHERE id = ?`
-		_, _ = m.db.Exec(updateSQL, dto.Severity, dto.Message, dto.LastSeenAt, cleared, clearedAt, id)
+		_, _ = m.db.Exec(updateSQL, dto.Severity, dto.Message, dto.LastSeenAt, cleared, now, clearedAt, id)
 	}
 }
 

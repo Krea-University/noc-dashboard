@@ -71,10 +71,10 @@ export const VlanControlPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
         <div>
           <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
-            <Layers className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /> FortiGate VLAN Internet Access Control
+            <Layers className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /> VLAN Manager
           </h1>
           <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
-            12-Step Verified Firewall Modification Pipeline with Blast Radius Estimation, Mandatory Password Re-Authentication & Rollback
+            FortiGate VLAN Internet Access Control • 12-Step Verified Firewall Modification Pipeline with Blast Radius Estimation & Rollback
           </p>
         </div>
 
