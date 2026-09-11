@@ -19,6 +19,7 @@ import { ReportsPage } from './pages/noc/ReportsPage';
 import { AuditPage } from './pages/noc/AuditPage';
 import { UsersPage } from './pages/noc/UsersPage';
 import { SettingsPage } from './pages/noc/SettingsPage';
+import { AuthGuard } from './components/auth/AuthGuard';
 
 export function App() {
   return (
@@ -26,11 +27,25 @@ export function App() {
       {/* Public / Auth */}
       <Route path="/login" element={<LoginPage />} />
 
-      {/* Mode 1: NOC TV Wall Display */}
-      <Route path="/display" element={<DisplayPage />} />
+      {/* Mode 1: NOC TV Wall Display (Protected - redirects unauthenticated users to login) */}
+      <Route
+        path="/display"
+        element={
+          <AuthGuard>
+            <DisplayPage />
+          </AuthGuard>
+        }
+      />
 
-      {/* Mode 3: Executive Management / CTO Dashboard */}
-      <Route path="/management" element={<ManagementPage />} />
+      {/* Mode 3: Executive Management / CTO Dashboard (Protected) */}
+      <Route
+        path="/management"
+        element={
+          <AuthGuard>
+            <ManagementPage />
+          </AuthGuard>
+        }
+      />
 
       {/* Mode 4: Flutter ERP Iframe Embed */}
       <Route path="/embed" element={<EmbedPage />} />
