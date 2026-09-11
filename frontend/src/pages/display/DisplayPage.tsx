@@ -1127,11 +1127,11 @@ export const DisplayPage: React.FC = () => {
                   <Server className="w-4 h-4 text-emerald-400" />
                 </div>
                 <div className="text-3xl font-black text-white font-mono mt-1">
-                  {summary?.servers_total ?? serverDevices.length}
+                  {summary?.servers_total ?? serverDevices?.length ?? 0}
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs font-mono border-t border-slate-800/80 pt-2">
-                  <span className="text-emerald-400 font-bold">{summary?.servers_up ?? serverDevices.filter((s) => s.status === 'UP').length} Online</span>
-                  <span className="text-slate-500">{summary?.servers_down ?? serverDevices.filter((s) => s.status === 'DOWN').length} Down</span>
+                  <span className="text-emerald-400 font-bold">{summary?.servers_up ?? serverDevices?.filter((s) => s.status === 'UP')?.length ?? 0} Online</span>
+                  <span className="text-slate-500">{summary?.servers_down ?? serverDevices?.filter((s) => s.status === 'DOWN')?.length ?? 0} Down</span>
                   <span className="text-emerald-400 font-bold">100.0%</span>
                 </div>
               </div>
@@ -1404,12 +1404,12 @@ export const DisplayPage: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Total Compute Hosts</span>
-                <div className="text-2xl font-black text-white font-mono">{summary?.servers_total ?? serverDevices.length}</div>
+                <div className="text-2xl font-black text-white font-mono">{summary?.servers_total ?? serverDevices?.length ?? 0}</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Compute Status</span>
                 <div className="text-2xl font-black text-emerald-400 font-mono">
-                  {serverDevices.filter((s) => s.status === 'UP').length}/{serverDevices.length || 7} ONLINE
+                  {(serverDevices || []).filter((s) => s.status === 'UP').length}/{(serverDevices || []).length || 0} ONLINE
                 </div>
               </div>
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">

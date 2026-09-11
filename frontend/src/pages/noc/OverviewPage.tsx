@@ -763,7 +763,7 @@ export const OverviewPage: React.FC = () => {
                 onClick={() => navigate('/noc/biometrics')}
                 className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 font-semibold"
               >
-                View All ({summary?.biometrics_total ?? biometricsList.length}) <ChevronRight className="w-3 h-3" />
+                View All ({summary?.biometrics_total ?? biometricsList?.length ?? 0}) <ChevronRight className="w-3 h-3" />
               </button>
             </div>
 
@@ -775,11 +775,11 @@ export const OverviewPage: React.FC = () => {
               <div className="flex-1 space-y-1.5 text-xs font-mono">
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Online:</span>
-                  <span className="text-emerald-400 font-bold">{summary?.biometrics_up ?? biometricsList.filter((b: any) => b.status === 'UP').length}</span>
+                  <span className="text-emerald-400 font-bold">{summary?.biometrics_up ?? biometricsList?.filter((b: any) => b.status === 'UP')?.length ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Offline:</span>
-                  <span className="text-red-400 font-bold">{summary?.biometrics_down ?? biometricsList.filter((b: any) => b.status === 'DOWN').length}</span>
+                  <span className="text-red-400 font-bold">{summary?.biometrics_down ?? biometricsList?.filter((b: any) => b.status === 'DOWN')?.length ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Sync Rate:</span>
@@ -810,7 +810,7 @@ export const OverviewPage: React.FC = () => {
                     <span
                       className={`px-1.5 py-0.2 rounded font-bold text-[9px] uppercase border ${
                         d.status === 'UP'
-                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                           ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                           : 'bg-red-500/15 border-red-500/30 text-red-400'
                       }`}
                     >
@@ -820,7 +820,7 @@ export const OverviewPage: React.FC = () => {
                 ))
               ) : (
                 <div className="py-3 text-center text-[10px] text-slate-500 italic">
-                  Monitoring {summary?.biometrics_total ?? biometricsList.length} biometric readers...
+                  Monitoring {summary?.biometrics_total ?? biometricsList?.length ?? 0} biometric readers...
                 </div>
               )}
             </div>
@@ -839,7 +839,7 @@ export const OverviewPage: React.FC = () => {
                 onClick={() => navigate('/noc/endpoints')}
                 className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 font-semibold"
               >
-                View All ({summary?.endpoints_total ?? endpointsList.length}) <ChevronRight className="w-3 h-3" />
+                View All ({summary?.endpoints_total ?? endpointsList?.length ?? 0}) <ChevronRight className="w-3 h-3" />
               </button>
             </div>
 
@@ -855,11 +855,11 @@ export const OverviewPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Online Workstations:</span>
-                  <span className="text-sky-400 font-bold">{summary?.endpoints_online ?? endpointsList.filter((e: any) => e.status === 'ONLINE').length}</span>
+                  <span className="text-sky-400 font-bold">{summary?.endpoints_online ?? endpointsList?.filter((e: any) => e.status === 'ONLINE')?.length ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Offline Workstations:</span>
-                  <span className="text-slate-400 font-bold">{summary?.endpoints_offline ?? endpointsList.filter((e: any) => e.status === 'OFFLINE').length}</span>
+                  <span className="text-slate-400 font-bold">{summary?.endpoints_offline ?? endpointsList?.filter((e: any) => e.status === 'OFFLINE')?.length ?? 0}</span>
                 </div>
               </div>
             </div>
