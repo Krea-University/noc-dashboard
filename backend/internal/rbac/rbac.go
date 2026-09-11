@@ -1,4 +1,4 @@
-﻿package rbac
+package rbac
 
 import (
 	"context"
@@ -52,6 +52,25 @@ func RequireAuth(authSvc *auth.Service) func(http.Handler) http.Handler {
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
 			ctx = context.WithValue(ctx, ScopeContextKey, scope)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// OptionalAuth middleware extracts user and scope if session token is present,
+// but allows unauthenticated access for read-only NOC wall displays and status dashboards.
+func OptionalAuth(authSvc *auth.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenStr := extractToken(r)
+			if tokenStr != "" {
+				user, scope, err := authSvc.ValidateSession(tokenStr)
+				if err == nil && user != nil {
+					ctx := context.WithValue(r.Context(), UserContextKey, user)
+					ctx = context.WithValue(ctx, ScopeContextKey, scope)
+					r = r.WithContext(ctx)
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

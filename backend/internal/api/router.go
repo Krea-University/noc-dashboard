@@ -99,11 +99,9 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 	r.Post("/api/auth/logout", handleLogout(deps))
 	r.Post("/api/embed/session", handleEmbedSession(deps))
 
-	// Authenticated Routes
+	// Public Monitoring, Wall Displays & Telemetry Routes (OptionalAuth allows unattended TV displays)
 	r.Group(func(api chi.Router) {
-		api.Use(rbac.RequireAuth(deps.AuthSvc))
-
-		api.Get("/api/me", handleMe(deps))
+		api.Use(rbac.OptionalAuth(deps.AuthSvc))
 
 		// Dashboards
 		api.Get("/api/dashboard/summary", handleDashboardSummary(deps))
@@ -112,64 +110,81 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		api.Get("/api/dashboard/endpoints", handleDashboardEndpoints(deps))
 		api.Get("/api/dashboard/biometrics", handleDashboardBiometrics(deps))
 
-		// Devices
+		// Devices (Read-Only)
 		api.Get("/api/devices", handleListDevices(deps))
 		api.Get("/api/devices/top-problems", handleGetTopProblemDevices(deps))
 		api.Get("/api/devices/{id}", handleGetDevice(deps))
 		api.Get("/api/devices/{id}/history", handleGetDeviceHistory(deps))
 
-		// Biometrics
+		// Biometrics (Read-Only)
 		api.Get("/api/biometrics", handleListBiometrics(deps))
 		api.Get("/api/biometrics/{id}", handleGetBiometric(deps))
-		api.Put("/api/biometrics/{id}/metadata", handleUpdateBiometricMeta(deps))
 
-		// Endpoints (Endpoint Central) & Custom Groups
+		// Endpoints & Custom Groups (Read-Only)
 		api.Get("/api/endpoints", handleListEndpoints(deps))
 		api.Get("/api/endpoints/custom-groups", handleListCustomGroups(deps))
-		api.Post("/api/endpoints/custom-groups", handleCreateCustomGroup(deps))
-		api.Delete("/api/endpoints/custom-groups/{id}", handleDeleteCustomGroup(deps))
 		api.Get("/api/endpoints/{id}", handleGetEndpoint(deps))
 
-		// Alarms & Incidents
+		// Alarms & Incidents (Read-Only Telemetry)
 		api.Get("/api/alarms", handleListAlarms(deps))
-		api.Post("/api/alarms/{id}/acknowledge", handleAcknowledgeAlarm(deps))
 		api.Get("/api/incidents", handleListIncidents(deps))
 		api.Get("/api/incidents/{id}", handleGetIncident(deps))
-		api.Post("/api/incidents/{id}/status", handleUpdateIncidentStatus(deps))
-		api.Post("/api/incidents/{id}/notes", handleAddIncidentNote(deps))
 
-		// VLAN & Firewall Control
-		api.Get("/api/vlans", handleListVLANs(deps))
-		api.Get("/api/vlans/{id}", handleGetVLAN(deps))
-		api.Get("/api/vlans/{id}/impact", handleGetVLANImpact(deps))
-		api.Post("/api/vlans/{id}/internet/disable", handleDisableVlanInternet(deps))
-		api.Post("/api/vlans/{id}/internet/enable", handleEnableVlanInternet(deps))
+		// Firewall & WAN Status (Read-Only)
 		api.Get("/api/firewall", handleGetFirewallStatus(deps))
-		api.Get("/api/actions", handleListActions(deps))
-		api.Post("/api/actions/{id}/rollback", handleRollbackAction(deps))
-
-		// Audit & Reports
-		api.Get("/api/audit", handleListAuditLogs(deps))
-		api.Get("/api/reports/availability", handleReportAvailability(deps))
 
 		// NOC Displays
 		api.Get("/api/displays", handleListDisplays(deps))
 		api.Post("/api/displays/heartbeat", handleDisplayHeartbeat(deps))
 
-		// Sound Settings
+		// Reports & Sound
+		api.Get("/api/reports/availability", handleReportAvailability(deps))
 		api.Get("/api/sound/profiles", handleListSoundProfiles(deps))
+	})
+
+	// Strictly Authenticated Routes (Operator Console & Network Control)
+	r.Group(func(api chi.Router) {
+		api.Use(rbac.RequireAuth(deps.AuthSvc))
+
+		api.Get("/api/me", handleMe(deps))
+
+		// Operator Actions & Alarm Management
+		api.Post("/api/alarms/{id}/acknowledge", handleAcknowledgeAlarm(deps))
+		api.Post("/api/incidents/{id}/status", handleUpdateIncidentStatus(deps))
+		api.Post("/api/incidents/{id}/notes", handleAddIncidentNote(deps))
+
+		// Custom Groups Mutations
+		api.Post("/api/endpoints/custom-groups", handleCreateCustomGroup(deps))
+		api.Delete("/api/endpoints/custom-groups/{id}", handleDeleteCustomGroup(deps))
+
+		// Biometrics Metadata Mutations
+		api.Put("/api/biometrics/{id}/metadata", handleUpdateBiometricMeta(deps))
+
+		// VLAN & Firewall Control Pipeline
+		api.Get("/api/vlans", handleListVLANs(deps))
+		api.Get("/api/vlans/{id}", handleGetVLAN(deps))
+		api.Get("/api/vlans/{id}/impact", handleGetVLANImpact(deps))
+		api.Post("/api/vlans/{id}/internet/disable", handleDisableVlanInternet(deps))
+		api.Post("/api/vlans/{id}/internet/enable", handleEnableVlanInternet(deps))
+		api.Get("/api/actions", handleListActions(deps))
+		api.Post("/api/actions/{id}/rollback", handleRollbackAction(deps))
+
+		// Audit Logs (Operators & Admins Only)
+		api.Get("/api/audit", handleListAuditLogs(deps))
+
+		// Sound Settings Mutation
 		api.Put("/api/sound/profiles/{category}", handleUpdateSoundProfile(deps))
 
-		// Users (Admin Only)
+		// User Administration (Admin Only)
 		api.Get("/api/users", handleListUsers(deps))
 		api.Post("/api/users", handleCreateUser(deps))
 		api.Patch("/api/users/{id}", handlePatchUser(deps))
 
-		// Settings
+		// System Settings (Admin Only)
 		api.Get("/api/settings", handleListSettings(deps))
 		api.Put("/api/settings", handleUpdateSettings(deps))
 
-		// Mock Simulation Controls (for interactive tests and NOC demonstrations)
+		// Simulation Controls
 		api.Post("/api/mock/simulate", handleMockSimulation(deps))
 	})
 
@@ -975,14 +990,15 @@ func handleListAlarms(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sev := r.URL.Query().Get("severity")
 		cleared := r.URL.Query().Get("cleared")
+		status := r.URL.Query().Get("status")
 		query := "SELECT id, source_id, source_system, device_id, device_name, device_ip, severity, message, entity, first_seen_at, last_seen_at, acknowledged, cleared FROM alarms WHERE 1=1"
 		var args []interface{}
 		if sev != "" {
 			query += " AND severity = ?"
 			args = append(args, sev)
 		}
-		if cleared == "false" || cleared == "0" {
-			query += " AND cleared = 0"
+		if cleared == "false" || cleared == "0" || status == "active" {
+			query += " AND cleared = 0 AND severity != 'CLEAR'"
 		}
 		query += " ORDER BY last_seen_at DESC LIMIT 100"
 

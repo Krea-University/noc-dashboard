@@ -88,7 +88,7 @@ export const DisplayPage: React.FC = () => {
 
   const { data: alarms } = useQuery({
     queryKey: ['display-alarms'],
-    queryFn: () => api.getAlarms(),
+    queryFn: () => api.getAlarms(undefined, false),
     refetchInterval: 10000,
   });
 
@@ -225,8 +225,8 @@ export const DisplayPage: React.FC = () => {
       const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       initial.push({
         time: timeStr,
-        inGbps: +(7.1 + Math.sin(i * 0.8) * 0.35).toFixed(2),
-        outGbps: +(5.0 + Math.cos(i * 0.8) * 0.28).toFixed(2),
+        inGbps: +(1.41 + Math.sin(i * 0.5) * 0.08).toFixed(2),
+        outGbps: +(0.37 + Math.cos(i * 0.5) * 0.04).toFixed(2),
       });
     }
     return initial;
@@ -256,7 +256,32 @@ export const DisplayPage: React.FC = () => {
   // ECharts Traffic Option for TV
   const tvTrafficOption = useMemo(() => ({
     backgroundColor: 'transparent',
-    grid: { left: '2%', right: '2%', bottom: '6%', top: '12%', containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#0a0f1d',
+      borderColor: '#1e293b',
+      textStyle: { color: '#f8fafc', fontSize: 12 },
+      formatter: (params: any) => {
+        if (!Array.isArray(params)) return '';
+        const time = params[0]?.axisValueLabel || '';
+        let s = `<div class="font-mono text-xs font-bold mb-1 text-slate-300">${time}</div>`;
+        for (const p of params) {
+          s += `<div class="flex items-center justify-between gap-4 text-xs font-mono">
+            <span style="color:${p.color}">${p.seriesName}:</span>
+            <span class="font-bold text-white">${p.value} Gbps</span>
+          </div>`;
+        }
+        return s;
+      },
+    },
+    legend: {
+      data: ['Inbound', 'Outbound'],
+      textStyle: { color: '#94a3b8', fontSize: 11 },
+      top: 0,
+      right: 12,
+      icon: 'circle',
+    },
+    grid: { left: '2%', right: '2%', bottom: '6%', top: '16%', containLabel: true },
     xAxis: {
       type: 'category',
       boundaryGap: false,
@@ -267,6 +292,8 @@ export const DisplayPage: React.FC = () => {
     yAxis: {
       type: 'value',
       name: 'Gbps',
+      min: 0,
+      max: 3.5,
       nameTextStyle: { color: '#94a3b8', fontSize: 11 },
       axisLine: { lineStyle: { color: '#334155' } },
       splitLine: { lineStyle: { color: '#1e293b' } },
@@ -276,10 +303,15 @@ export const DisplayPage: React.FC = () => {
       {
         name: 'Inbound',
         type: 'line',
-        smooth: true,
+        smooth: 0.3,
+        showSymbol: false,
         data: tvTrafficHistory.map((h) => h.inGbps),
         itemStyle: { color: '#3b82f6' },
-        lineStyle: { width: 3 },
+        lineStyle: {
+          width: 3,
+          shadowColor: 'rgba(59, 130, 246, 0.45)',
+          shadowBlur: 8,
+        },
         areaStyle: {
           color: {
             type: 'linear',
@@ -297,10 +329,15 @@ export const DisplayPage: React.FC = () => {
       {
         name: 'Outbound',
         type: 'line',
-        smooth: true,
+        smooth: 0.3,
+        showSymbol: false,
         data: tvTrafficHistory.map((h) => h.outGbps),
         itemStyle: { color: '#10b981' },
-        lineStyle: { width: 3 },
+        lineStyle: {
+          width: 3,
+          shadowColor: 'rgba(16, 185, 129, 0.45)',
+          shadowBlur: 8,
+        },
         areaStyle: {
           color: {
             type: 'linear',
@@ -705,8 +742,8 @@ export const DisplayPage: React.FC = () => {
                     <span className="text-emerald-400 font-bold">Outbound: {formatBps(summary?.outbound_traffic_bps || (firewall as any)?.outbound_bps, '366.6 Mbps')}</span>
                   </div>
                 </div>
-                <div className="flex-1 min-h-[190px]">
-                  <ReactECharts option={tvTrafficOption} style={{ height: '100%', width: '100%' }} />
+                <div className="flex-1 min-h-[190px] h-[215px] w-full">
+                  <ReactECharts option={tvTrafficOption} style={{ height: '100%', width: '100%' }} notMerge={true} />
                 </div>
                 <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 gap-2">
                   {(firewall as any)?.wan_links && (firewall as any).wan_links.length > 0 ? (
@@ -740,8 +777,8 @@ export const DisplayPage: React.FC = () => {
                         Active Alarms Stream
                       </h3>
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono font-bold">
-                      {alarms?.length ?? 0}
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950/60 text-red-300 border border-red-800/60 font-mono font-bold">
+                      {alarms?.length ?? 0} ACTIVE
                     </span>
                   </div>
 
@@ -750,29 +787,38 @@ export const DisplayPage: React.FC = () => {
                       alarms.slice(0, 4).map((a) => (
                         <div
                           key={a.id}
-                          className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+                          className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs hover:border-slate-700 transition-colors"
                         >
                           <div className="flex items-center justify-between font-bold">
-                            <span className="text-slate-200">{a.device_name}</span>
+                            <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                              <span className="text-slate-200 truncate">{a.device_name || a.device_ip || 'Device Alert'}</span>
+                              {a.device_ip && a.device_name && a.device_name !== a.device_ip && (
+                                <span className="text-[10px] text-slate-500 font-mono">({a.device_ip})</span>
+                              )}
+                            </div>
                             <span
-                              className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-bold border ${
+                              className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-bold border ${
                                 a.severity === 'CRITICAL'
-                                  ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                                  : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                  ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                                  : a.severity === 'MAJOR'
+                                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                                  : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'
                               }`}
                             >
                               {a.severity}
                             </span>
                           </div>
                           <p className="text-slate-300 text-[11px] mt-1 line-clamp-1">{a.message}</p>
-                          <div className="text-[10px] text-slate-500 font-mono mt-1">
-                            {new Date(a.first_seen_at).toLocaleTimeString()}
+                          <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center justify-between">
+                            <span>{new Date(a.last_seen_at || a.first_seen_at).toLocaleTimeString()}</span>
+                            <span className="text-slate-600 uppercase text-[9px]">{a.source_system}</span>
                           </div>
                         </div>
                       ))
                     ) : (
-                      <div className="py-12 text-center text-xs text-slate-500 italic">
-                        No active unacknowledged alerts.
+                      <div className="py-12 text-center text-xs text-slate-500 italic flex flex-col items-center gap-2">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500/60" />
+                        <span>No active unacknowledged alerts</span>
                       </div>
                     )}
                   </div>

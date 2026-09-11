@@ -95,11 +95,16 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // Alarms & Incidents
-  getAlarms: (severity?: string, cleared?: boolean) => {
+  getAlarms: (severity?: string, cleared?: boolean | string) => {
     const params = new URLSearchParams();
     if (severity) params.set('severity', severity);
-    if (cleared !== undefined) params.set('cleared', cleared.toString());
+    if (cleared !== undefined) {
+      if (typeof cleared === 'boolean') {
+        params.set('cleared', cleared ? 'true' : 'false');
+      } else {
+        params.set('status', cleared);
+      }
+    }
     return request<Alarm[]>(`/alarms?${params.toString()}`);
   },
   acknowledgeAlarm: (id: string) =>

@@ -15,16 +15,16 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api/ws': {
-        target: 'ws://localhost:8080',
+        target: 'ws://localhost',
         ws: true,
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost',
         changeOrigin: true,
       },
     },
