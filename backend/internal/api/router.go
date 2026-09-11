@@ -1052,14 +1052,14 @@ func handleListIncidents(deps *RouterDeps) http.HandlerFunc {
 		rows, err := deps.DB.Query(`
 			SELECT id, incident_number, title, description, severity, status, source_system, primary_device_id, affected_devices_count, assigned_to_username, created_at, updated_at
 			FROM incidents
-			ORDER BY created_at DESC LIMIT 50`)
+			ORDER BY CASE status WHEN 'OPEN' THEN 1 WHEN 'INVESTIGATING' THEN 2 WHEN 'ACKNOWLEDGED' THEN 3 ELSE 4 END ASC, created_at DESC LIMIT 50`)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		defer rows.Close()
 
-		var incidents []models.Incident
+		incidents := make([]models.Incident, 0)
 		for rows.Next() {
 			var inc models.Incident
 			var user *string

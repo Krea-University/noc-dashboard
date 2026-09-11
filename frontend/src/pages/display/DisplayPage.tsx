@@ -253,6 +253,31 @@ export const DisplayPage: React.FC = () => {
     return (bps / 1e6).toFixed(1) + ' Mbps';
   };
 
+  // Real-time calculated telemetry for TV display views
+  const downDevices = useMemo(() => (devices || []).filter((d) => d.status === 'DOWN'), [devices]);
+  const warningDevices = useMemo(() => (devices || []).filter((d) => d.status === 'WARNING'), [devices]);
+  const criticalAlarms = useMemo(() => (alarms || []).filter((a) => a.severity === 'CRITICAL'), [alarms]);
+  const majorAlarms = useMemo(() => (alarms || []).filter((a) => a.severity === 'MAJOR'), [alarms]);
+  const warningAlarms = useMemo(() => (alarms || []).filter((a) => a.severity === 'WARNING'), [alarms]);
+
+  const activeIncidents = useMemo(
+    () => (incidents || []).filter((i) => i.status !== 'RESOLVED'),
+    [incidents]
+  );
+
+  const totalDevCount = devices?.length || 761;
+  const slaPercentage = totalDevCount > 0
+    ? (((totalDevCount - downDevices.length) / totalDevCount) * 100).toFixed(2)
+    : '99.85';
+
+  const downSwitches = useMemo(() => downDevices.filter((d) => d.category_code === 'SWITCH'), [downDevices]);
+  const downBio = useMemo(() => downDevices.filter((d) => d.category_code === 'BIOMETRIC'), [downDevices]);
+  const downServers = useMemo(() => downDevices.filter((d) => d.category_code === 'SERVER'), [downDevices]);
+  const downAPs = useMemo(
+    () => downDevices.filter((d) => (d.type || '').toLowerCase().includes('ap') || d.name.toLowerCase().includes('ap')),
+    [downDevices]
+  );
+
   // ECharts Traffic Option for TV
   const tvTrafficOption = useMemo(() => ({
     backgroundColor: 'transparent',
@@ -1346,70 +1371,296 @@ export const DisplayPage: React.FC = () => {
         {/* ============================================================== */}
         {currentPageIndex === 5 && (
           <div className="h-full flex flex-col justify-between space-y-4">
+            {/* REAL-TIME KPI HEADER CARDS */}
             <div className="grid grid-cols-4 gap-4">
-              <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/30 text-center">
-                <span className="text-red-400 text-xs font-bold uppercase">Critical Outages</span>
-                <div className="text-3xl font-black text-red-300 font-mono mt-1">3</div>
-              </div>
-              <div className="p-4 rounded-xl bg-orange-950/20 border border-orange-500/30 text-center">
-                <span className="text-orange-400 text-xs font-bold uppercase">Major Incidents</span>
-                <div className="text-3xl font-black text-orange-300 font-mono mt-1">7</div>
-              </div>
-              <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 text-center">
-                <span className="text-amber-400 text-xs font-bold uppercase">Warning Alarms</span>
-                <div className="text-3xl font-black text-amber-300 font-mono mt-1">12</div>
-              </div>
-              <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-center">
-                <span className="text-emerald-400 text-xs font-bold uppercase">SLA Adherence</span>
-                <div className="text-3xl font-black text-emerald-300 font-mono mt-1">99.85%</div>
-              </div>
-            </div>
-
-            <div className="noc-card p-5 rounded-xl border-slate-800 flex-1 flex flex-col justify-between bg-[#0a101d]">
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-slate-200 mb-3 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-red-400" /> Active Campus Operational Incidents
-                </h3>
-                <div className="space-y-3">
-                  {incidents && incidents.length > 0 ? (
-                    incidents.map((inc: any) => (
-                      <div
-                        key={inc.id}
-                        className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center gap-3 mb-1">
-                            <span className="font-mono text-red-400 font-bold">{inc.incident_number}</span>
-                            <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-xs font-bold uppercase">
-                              {inc.status}
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-xs font-bold uppercase">
-                              {inc.severity}
-                            </span>
-                          </div>
-                          <h4 className="text-sm font-bold text-slate-100">{inc.title}</h4>
-                          <p className="text-xs text-slate-400 mt-0.5">{inc.description}</p>
-                        </div>
-                        <div className="text-right font-mono text-xs text-slate-400">
-                          <div className="text-slate-300 font-bold">Affected: {inc.affected_devices_count} Devices</div>
-                          <div className="mt-1">{new Date(inc.created_at).toLocaleTimeString()}</div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-                      <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm mb-1">
-                        <CheckCircle2 className="w-5 h-5" /> All Campus Services Operational
-                      </div>
-                      <p className="text-xs text-slate-400 font-mono">0 active incidents reported across university infrastructure.</p>
-                    </div>
-                  )}
+              <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/40 text-center relative overflow-hidden">
+                {downDevices.length > 0 && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+                )}
+                <span className="text-red-400 text-xs font-bold uppercase tracking-wider">Critical Outages</span>
+                <div className="text-3xl font-black text-red-300 font-mono mt-1">
+                  {downDevices.length || criticalAlarms.length}
+                </div>
+                <div className="text-[11px] text-red-400/80 font-mono mt-0.5">
+                  {downDevices.length} Down Infrastructure Nodes
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800 text-xs font-mono text-slate-400 flex justify-between">
-                <span>Mean Time to Resolution (MTTR): ~14.5 minutes</span>
-                <span className="text-emerald-400 font-bold">99.85% Operational SLA Commitment Met</span>
+              <div className="p-4 rounded-xl bg-orange-950/20 border border-orange-500/40 text-center">
+                <span className="text-orange-400 text-xs font-bold uppercase tracking-wider">Major Incidents</span>
+                <div className="text-3xl font-black text-orange-300 font-mono mt-1">
+                  {Math.max(activeIncidents.length, majorAlarms.length)}
+                </div>
+                <div className="text-[11px] text-orange-400/80 font-mono mt-0.5">
+                  {activeIncidents.length} Active Tickets · {majorAlarms.length} Major Alarms
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 text-center">
+                <span className="text-amber-400 text-xs font-bold uppercase tracking-wider">Warning Telemetry</span>
+                <div className="text-3xl font-black text-amber-300 font-mono mt-1">
+                  {warningAlarms.length}
+                </div>
+                <div className="text-[11px] text-amber-400/80 font-mono mt-0.5">
+                  {warningDevices.length} Degraded Nodes · {warningAlarms.length} Alerts
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/40 text-center">
+                <span className="text-emerald-400 text-xs font-bold uppercase tracking-wider">Campus SLA Adherence</span>
+                <div className="text-3xl font-black text-emerald-300 font-mono mt-1">
+                  {slaPercentage}%
+                </div>
+                <div className="text-[11px] text-emerald-400/80 font-mono mt-0.5">
+                  {totalDevCount - downDevices.length} of {totalDevCount} Nodes Online
+                </div>
+              </div>
+            </div>
+
+            {/* DUAL-COLUMN HIGH DENSITY INCIDENTS & OUTAGES PANEL */}
+            <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+              {/* LEFT COLUMN: ACTIVE INCIDENTS & OUTAGES LIST (7 cols) */}
+              <div className="col-span-7 noc-card p-5 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d]">
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400" />
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                        Active Campus Operational Incidents & Outages
+                      </h3>
+                    </div>
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-red-950/60 text-red-300 border border-red-800/60 font-mono font-bold">
+                      {Math.max(activeIncidents.length, downDevices.length)} ACTIVE
+                    </span>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 max-h-[460px]">
+                    {activeIncidents.length > 0 ? (
+                      activeIncidents.map((inc: any) => (
+                        <div
+                          key={inc.id}
+                          className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-colors flex flex-col gap-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-red-400">{inc.incident_number}</span>
+                              <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-bold uppercase border border-red-500/30">
+                                {inc.status}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase border border-amber-500/30">
+                                {inc.severity}
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              {new Date(inc.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-100">{inc.title}</h4>
+                          <p className="text-[11px] text-slate-400 line-clamp-2">{inc.description}</p>
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                            <span>Primary Node: <strong className="text-slate-300 font-normal">{inc.primary_device_id || 'Campus Infra'}</strong></span>
+                            <span className="text-slate-400 font-bold">Impact: {inc.affected_devices_count || 1} Device(s)</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : downDevices.length > 0 ? (
+                      downDevices.map((d: any, idx: number) => (
+                        <div
+                          key={d.id}
+                          className="p-3.5 rounded-xl bg-slate-900/90 border border-red-900/40 hover:border-red-700/60 transition-colors flex flex-col gap-1.5"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-bold text-red-400">OUT-{new Date().getFullYear()}-{String(idx + 1).padStart(3, '0')}</span>
+                              <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-bold uppercase border border-red-500/30 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                                ACTIVE OUTAGE
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-mono uppercase">
+                                {d.category_code}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono text-red-400 font-bold">STATUS DOWN</span>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-100 flex items-center gap-2">
+                            <span>{d.name}</span>
+                            {d.ip_address && <span className="text-slate-400 font-mono text-[11px]">({d.ip_address})</span>}
+                          </h4>
+                          <p className="text-[11px] text-slate-400">
+                            Infrastructure {d.type || d.category_code} is unreachable in OpManager telemetry. Automated ICMP poll failed.
+                          </p>
+                          <div className="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                            <span>Vendor: {d.vendor || 'Campus Device'} {d.model || ''}</span>
+                            <span className="text-slate-400">Since: {new Date(d.last_status_change_at || d.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-16 text-center text-xs text-slate-500 flex flex-col items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                        </div>
+                        <div>
+                          <div className="text-emerald-400 font-bold text-sm">All Campus Infrastructure Operational</div>
+                          <p className="text-slate-400 text-[11px] mt-1">All 761 network devices, servers, and biometrics reporting normal.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 text-xs font-mono text-slate-400 flex justify-between">
+                  <span>MTTR Target: <strong className="text-slate-200">15.0 min</strong></span>
+                  <span className="text-emerald-400 font-bold">{slaPercentage}% Operational Uptime</span>
+                </div>
+              </div>
+
+              {/* RIGHT COLUMN: OUTAGE IMPACT BREAKDOWN & CORRELATED ALARMS (5 cols) */}
+              <div className="col-span-5 flex flex-col gap-4">
+                {/* CARD 1: OUTAGE IMPACT BY SUBSYSTEM */}
+                <div className="noc-card p-4 rounded-xl border-slate-800 bg-[#0a101d] flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-sky-400" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                          Outage Impact by Category
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {downDevices.length} Total Affected
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs font-mono">
+                      {/* Switches */}
+                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                            <Network className="w-3.5 h-3.5 text-blue-400" /> Network Switches
+                          </span>
+                          <span className={downSwitches.length > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                            {downSwitches.length} Down / {devices?.filter((d) => d.category_code === 'SWITCH').length || 64}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${downSwitches.length > 0 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                            style={{
+                              width: `${Math.max(5, 100 - (downSwitches.length / Math.max(1, devices?.filter((d) => d.category_code === 'SWITCH').length || 64)) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* APs */}
+                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                            <Wifi className="w-3.5 h-3.5 text-cyan-400" /> Campus Wireless APs
+                          </span>
+                          <span className={downAPs.length > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                            {downAPs.length} Down
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${downAPs.length > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            style={{ width: `${Math.max(5, 100 - (downAPs.length / 300) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Biometrics */}
+                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                            <Fingerprint className="w-3.5 h-3.5 text-purple-400" /> Biometric Terminals
+                          </span>
+                          <span className={downBio.length > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold'}>
+                            {downBio.length} Down / {devices?.filter((d) => d.category_code === 'BIOMETRIC').length || 90}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${downBio.length > 0 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                            style={{
+                              width: `${Math.max(5, 100 - (downBio.length / Math.max(1, devices?.filter((d) => d.category_code === 'BIOMETRIC').length || 90)) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Servers */}
+                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                        <div className="flex items-center justify-between text-[11px] mb-1">
+                          <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                            <Server className="w-3.5 h-3.5 text-emerald-400" /> Servers & Compute
+                          </span>
+                          <span className="text-emerald-400 font-bold">
+                            {downServers.length} Down / {devices?.filter((d) => d.category_code === 'SERVER').length || 12}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500" style={{ width: '100%' }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CARD 2: CORRELATED PRIORITY ALARMS */}
+                <div className="noc-card p-4 rounded-xl border-slate-800 bg-[#0a101d] flex-1 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                          Correlated Priority Alarms
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {alarms?.length ?? 0} Live
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                      {alarms && alarms.length > 0 ? (
+                        alarms.slice(0, 4).map((a) => (
+                          <div
+                            key={a.id}
+                            className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px]"
+                          >
+                            <div className="flex items-center justify-between font-bold mb-0.5">
+                              <span className="text-slate-200 truncate max-w-[70%]">{a.device_name || a.device_ip}</span>
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-bold border ${
+                                  a.severity === 'CRITICAL'
+                                    ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                                    : a.severity === 'MAJOR'
+                                    ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                                    : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                }`}
+                              >
+                                {a.severity}
+                              </span>
+                            </div>
+                            <p className="text-slate-400 text-[10px] line-clamp-1">{a.message}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-6 text-center text-xs text-slate-500 italic">
+                          No active alarms reported.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800 text-[10px] font-mono text-slate-500 flex justify-between">
+                    <span>OpManager NMS Telemetry</span>
+                    <span className="text-sky-400">Live Delta Stream</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

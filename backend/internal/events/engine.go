@@ -1,4 +1,4 @@
-﻿package events
+package events
 
 import (
 	"context"
@@ -56,6 +56,7 @@ func NewEngine(db *database.DB, soundEngine *sound.Engine, wsHub *websocket.Hub)
 		downStart:   make(map[string]time.Time),
 	}
 	e.loadInitialStates()
+	e.syncActiveIncidentsForDownDevices()
 	return e
 }
 
@@ -78,6 +79,46 @@ func (e *Engine) loadInitialStates() {
 			if status == "DOWN" && changeAt != nil {
 				e.downStart[id] = *changeAt
 			}
+		}
+	}
+}
+
+func (e *Engine) syncActiveIncidentsForDownDevices() {
+	now := time.Now().UTC()
+	rows, err := e.db.Query(`
+		SELECT d.id, d.name, COALESCE(d.ip_address, ''), d.category_code, d.last_status_change_at
+		FROM devices d
+		WHERE d.status = 'DOWN'
+	`)
+	if err != nil {
+		slog.Error("failed querying down devices for incidents", "error", err)
+		return
+	}
+	defer rows.Close()
+
+	idx := 1
+	for rows.Next() {
+		var id, name, ip, cat string
+		var lastChange *time.Time
+		if err := rows.Scan(&id, &name, &ip, &cat, &lastChange); err != nil {
+			continue
+		}
+		var count int
+		_ = e.db.QueryRow("SELECT COUNT(*) FROM incidents WHERE primary_device_id = ? AND status IN ('OPEN', 'INVESTIGATING', 'ACKNOWLEDGED')", id).Scan(&count)
+		if count == 0 {
+			incID := "inc_" + uuid.New().String()[:8]
+			incNum := fmt.Sprintf("INC-%d-%03d", now.Year(), idx)
+			incTitle := fmt.Sprintf("%s Unreachable / Outage Detected", name)
+			alarmMsg := fmt.Sprintf("Infrastructure %s %s (%s) is unreachable (status DOWN)", cat, name, ip)
+			ts := now
+			if lastChange != nil && !lastChange.IsZero() {
+				ts = *lastChange
+			}
+			_, _ = e.db.Exec(`
+				INSERT INTO incidents (id, incident_number, title, description, severity, status, source_system, primary_device_id, affected_devices_count, created_at, updated_at)
+				VALUES (?, ?, ?, ?, 'CRITICAL', 'OPEN', 'opmanager', ?, 1, ?, ?)`,
+				incID, incNum, incTitle, alarmMsg, id, ts, now)
+			idx++
 		}
 	}
 }
@@ -204,6 +245,12 @@ func (e *Engine) HandleDeviceTransition(ctx context.Context, dev *models.Device)
 			UPDATE alarms
 			SET cleared = 1, cleared_at = ?
 			WHERE device_id = ? AND cleared = 0`, now, dev.ID)
+
+		// 3b. Mark open incidents resolved
+		_, _ = e.db.Exec(`
+			UPDATE incidents
+			SET status = 'RESOLVED', updated_at = ?
+			WHERE primary_device_id = ? AND status IN ('OPEN', 'INVESTIGATING', 'ACKNOWLEDGED')`, now, dev.ID)
 
 		// 4. Broadcast Recovery Banner
 		downtimeStr := formatDuration(downtimeSecs)
