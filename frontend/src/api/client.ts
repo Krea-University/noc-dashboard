@@ -150,6 +150,12 @@ export const api = {
     return request<AuditLog[]>(`/audit?${params.toString()}`);
   },
   getAvailabilityReport: () => request<unknown>('/reports/availability'),
+  getLLPReport: (provider?: string, range?: string) => {
+    const params = new URLSearchParams();
+    if (provider) params.set('provider', provider);
+    if (range) params.set('range', range);
+    return request<any>(`/reports/llp?${params.toString()}`);
+  },
 
   // NOC Displays
   getDisplays: () => request<DisplayDevice[]>('/displays'),

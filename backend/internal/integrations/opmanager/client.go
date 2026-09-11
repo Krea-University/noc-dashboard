@@ -1,4 +1,4 @@
-﻿package opmanager
+package opmanager
 
 import (
 	"context"
@@ -163,8 +163,8 @@ func (c *Client) GetDevices(ctx context.Context) ([]integrations.DeviceDTO, erro
 			vendor = "ZKTeco"
 		} else if d.Category == "Server" || strings.Contains(strings.ToLower(d.Type), "server") {
 			catCode = "SERVER"
-		} else if d.Category == "Wireless Access Point" {
-			catCode = "SWITCH"
+		} else if d.Category == "Wireless Access Point" || strings.Contains(strings.ToLower(d.Type), "ap") || strings.Contains(strings.ToLower(d.Type), "access point") || strings.Contains(strings.ToLower(d.Type), "aruba") || strings.Contains(strings.ToLower(d.Type), "ruckus") || strings.HasSuffix(strings.ToLower(name), "_ap") {
+			catCode = "WIRELESS_AP"
 			if devType == "" {
 				devType = "Access Point"
 			}

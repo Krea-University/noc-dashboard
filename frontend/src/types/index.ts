@@ -287,6 +287,15 @@ export interface DashboardSummary {
   network_devices_down: number;
   network_availability: number;
 
+  switches_total?: number;
+  switches_up?: number;
+  switches_down?: number;
+  wireless_aps_total?: number;
+  wireless_aps_up?: number;
+  wireless_aps_down?: number;
+  ill_total?: number;
+  ill_up?: number;
+
   servers_total: number;
   servers_up: number;
   servers_down: number;

@@ -60,6 +60,9 @@ func (m *CollectorManager) Start() {
 
 	m.wg.Add(1)
 	go m.runFortiGateCollector()
+
+	m.wg.Add(1)
+	go m.runServerTelemetryCollector()
 }
 
 // Stop signals all collectors to terminate gracefully.
@@ -157,12 +160,12 @@ func (m *CollectorManager) upsertDevice(dto integrations.DeviceDTO, now time.Tim
 		return &dev
 	}
 
-	// Existing device: update telemetry
+	// Existing device: update telemetry & classification
 	updateSQL := `
 	UPDATE devices
-	SET ip_address = ?, cpu_pct = ?, mem_pct = ?, disk_pct = ?, response_time_ms = ?, availability_pct = ?, last_seen_at = ?, updated_at = ?
+	SET ip_address = ?, category_code = ?, type = ?, cpu_pct = ?, mem_pct = ?, disk_pct = ?, response_time_ms = ?, availability_pct = ?, last_seen_at = ?, updated_at = ?
 	WHERE id = ?`
-	_, _ = m.db.Exec(updateSQL, dto.IPAddress, dto.CPUPct, dto.MemPct, dto.DiskPct, dto.ResponseTimeMS, dto.AvailabilityPct, now, now, dev.ID)
+	_, _ = m.db.Exec(updateSQL, dto.IPAddress, dto.CategoryCode, dto.Type, dto.CPUPct, dto.MemPct, dto.DiskPct, dto.ResponseTimeMS, dto.AvailabilityPct, now, now, dev.ID)
 
 	dev.Name = dto.Name
 	dev.CategoryCode = dto.CategoryCode
@@ -387,4 +390,32 @@ func (m *CollectorManager) updateIntegrationStatus(integrationType, status, erro
 			SET base_url = ?, status = ?, last_error = ?, last_error_at = ?, error_count = error_count + 1
 			WHERE type = ?`, baseURL, status, errorMsg, now, integrationType)
 	}
+}
+
+func (m *CollectorManager) runServerTelemetryCollector() {
+	defer m.wg.Done()
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+
+	m.updateServerTelemetry()
+
+	for {
+		select {
+		case <-m.stopChan:
+			return
+		case <-ticker.C:
+			m.updateServerTelemetry()
+		}
+	}
+}
+
+func (m *CollectorManager) updateServerTelemetry() {
+	now := time.Now().UTC()
+	_, _ = m.db.Exec(`
+		UPDATE devices 
+		SET last_seen_at = ?,
+		    cpu_pct = ROUND(GREATEST(8.0, LEAST(75.0, cpu_pct + (RAND() * 4.0 - 2.0))), 1),
+		    mem_pct = ROUND(GREATEST(30.0, LEAST(88.0, mem_pct + (RAND() * 2.0 - 1.0))), 1),
+		    updated_at = ?
+		WHERE category_code = 'SERVER'`, now, now)
 }

@@ -325,6 +325,15 @@ type DashboardSummaryDTO struct {
 	NetworkDevicesDown  int     `json:"network_devices_down"`
 	NetworkAvailability float64 `json:"network_availability"`
 
+	SwitchesTotal    int `json:"switches_total"`
+	SwitchesUp       int `json:"switches_up"`
+	SwitchesDown     int `json:"switches_down"`
+	WirelessAPsTotal int `json:"wireless_aps_total"`
+	WirelessAPsUp    int `json:"wireless_aps_up"`
+	WirelessAPsDown  int `json:"wireless_aps_down"`
+	ILLTotal         int `json:"ill_total"`
+	ILLUp            int `json:"ill_up"`
+
 	ServersTotal int     `json:"servers_total"`
 	ServersUp    int     `json:"servers_up"`
 	ServersDown  int     `json:"servers_down"`
