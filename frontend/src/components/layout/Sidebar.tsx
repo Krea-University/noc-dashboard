@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Network,
@@ -29,6 +29,7 @@ export const Sidebar: React.FC<Props> = ({
   isOpen = false,
   onClose,
 }) => {
+  const location = useLocation();
   const navItems = [
     { label: 'Dashboard', to: '/noc', icon: LayoutDashboard, exact: true },
     { label: 'Network', to: '/noc/network', icon: Network },
@@ -91,13 +92,19 @@ export const Sidebar: React.FC<Props> = ({
                 to={item.to}
                 end={item.exact}
                 onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    isActive
+                className={({ isActive }) => {
+                  let isItemActive = isActive;
+                  if (item.to === '/noc/network') {
+                    isItemActive = isActive && !location.search.includes('category=WIRELESS_AP');
+                  } else if (item.to.includes('category=WIRELESS_AP')) {
+                    isItemActive = location.pathname === '/noc/network' && location.search.includes('category=WIRELESS_AP');
+                  }
+                  return `flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    isItemActive
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/90'
-                  }`
-                }
+                  }`;
+                }}
               >
                 <div className="flex items-center gap-2.5">
                   <Icon className="w-4 h-4 shrink-0" />

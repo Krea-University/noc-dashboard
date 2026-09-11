@@ -490,6 +490,10 @@ func handleListDevices(deps *RouterDeps) http.HandlerFunc {
 				conditions = append(conditions, "(type LIKE '%Firewall%' OR vendor LIKE '%Fortinet%')")
 			case "ROUTER":
 				conditions = append(conditions, "(category_code = 'ROUTER' OR type LIKE '%Router%')")
+			case "ILL", "LEASED_LINE":
+				conditions = append(conditions, "(category_code = 'ILL' OR type LIKE '%Leased Line%' OR type LIKE '%ILL%')")
+			case "NETWORK":
+				conditions = append(conditions, "category_code IN ('SWITCH', 'ROUTER', 'WIRELESS_AP', 'ILL', 'FIREWALL')")
 			default:
 				conditions = append(conditions, fmt.Sprintf("category_code = '%s'", sanitizeSQL(cat)))
 			}

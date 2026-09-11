@@ -409,7 +409,7 @@ export const OverviewPage: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
         {/* Sites / ILL */}
         <div
-          onClick={() => navigate('/noc/network')}
+          onClick={() => navigate('/noc/network?category=ILL')}
           className="noc-card p-3 rounded-xl cursor-pointer hover:border-blue-500/60 transition-all border-t-2 border-t-blue-500 flex flex-col justify-between"
         >
           <div className="flex items-center justify-between">
@@ -417,19 +417,21 @@ export const OverviewPage: React.FC = () => {
             <Globe className="w-3.5 h-3.5 text-blue-400" />
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">3</span>
+            <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+              {summary?.ill_total ?? (fw.wan_links?.length || 3)}
+            </span>
             <span className="text-[10px] text-slate-400 font-medium">Links</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-emerald-400 font-bold">2 Up</span>
-            <span className="text-blue-400">1 Stby</span>
-            <span className="text-slate-500">0 Dn</span>
+            <span className="text-emerald-400 font-bold">{summary?.ill_up ?? 3} Up</span>
+            <span className="text-blue-400">100%</span>
+            <span className="text-slate-500">{(summary?.ill_total ?? 3) - (summary?.ill_up ?? 3)} Dn</span>
           </div>
         </div>
 
         {/* Network Devices */}
         <div
-          onClick={() => navigate('/noc/network')}
+          onClick={() => navigate('/noc/network?category=NETWORK')}
           className="noc-card p-3 rounded-xl cursor-pointer hover:border-indigo-500/60 transition-all border-t-2 border-t-indigo-500 flex flex-col justify-between"
         >
           <div className="flex items-center justify-between">
@@ -451,7 +453,7 @@ export const OverviewPage: React.FC = () => {
 
         {/* Switches */}
         <div
-          onClick={() => navigate('/noc/network')}
+          onClick={() => navigate('/noc/network?category=SWITCH')}
           className="noc-card p-3 rounded-xl cursor-pointer hover:border-cyan-500/60 transition-all border-t-2 border-t-cyan-500 flex flex-col justify-between"
         >
           <div className="flex items-center justify-between">
@@ -473,7 +475,7 @@ export const OverviewPage: React.FC = () => {
 
         {/* Wireless APs */}
         <div
-          onClick={() => navigate('/noc/wireless')}
+          onClick={() => navigate('/noc/network?category=WIRELESS_AP')}
           className="noc-card p-3 rounded-xl cursor-pointer hover:border-sky-500/60 transition-all border-t-2 border-t-sky-500 flex flex-col justify-between"
         >
           <div className="flex items-center justify-between">

@@ -7,25 +7,38 @@ import { DeviceDrawer } from '../../components/common/DeviceDrawer';
 import { Device } from '../../types';
 
 export const NetworkPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const [category, setCategory] = useState<string>(searchParams.get('category') || '');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [category, setCategory] = useState<string>(searchParams.get('category') || 'NETWORK');
   const [status, setStatus] = useState<string>('');
   const [search, setSearch] = useState<string>('');
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     const cat = searchParams.get('category');
-    if (cat !== null) {
+    if (cat) {
       setCategory(cat);
-      setPage(1);
+    } else {
+      setCategory('NETWORK');
     }
+    setPage(1);
   }, [searchParams]);
+
+  const handleCategoryChange = (val: string) => {
+    setCategory(val);
+    setPage(1);
+    if (val && val !== 'NETWORK') {
+      setSearchParams({ category: val });
+    } else {
+      setSearchParams({});
+    }
+  };
+
   const pageSize = 30;
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
 
   const { data: devices, isLoading } = useQuery({
     queryKey: ['devices', category, status, search],
-    queryFn: () => api.getDevices(category || undefined, search || undefined, status || undefined),
+    queryFn: () => api.getDevices(category || 'NETWORK', search || undefined, status || undefined),
     refetchInterval: 15000,
   });
 
@@ -103,20 +116,17 @@ export const NetworkPage: React.FC = () => {
       {/* Category Quick Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
         {[
-          { label: 'All Devices', val: '' },
+          { label: 'All Net Devices', val: 'NETWORK' },
           { label: 'Switches', val: 'SWITCH' },
           { label: 'Wireless APs', val: 'WIRELESS_AP' },
-          { label: 'Leased Lines', val: 'ILL' },
+          { label: 'Leased Lines (ILL)', val: 'ILL' },
           { label: 'Firewalls', val: 'FIREWALL' },
         ].map((tab) => (
           <button
             key={tab.val}
-            onClick={() => {
-              setCategory(tab.val);
-              setPage(1);
-            }}
+            onClick={() => handleCategoryChange(tab.val)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              category === tab.val
+              category === tab.val || (tab.val === 'NETWORK' && (category === '' || category === 'NETWORK'))
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                 : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
             }`}
