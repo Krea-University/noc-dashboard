@@ -1,7 +1,7 @@
 import {
-  User, Device, DeviceHistory, Endpoint, CustomGroup, Alarm, Incident,
+  User, Role, Device, DeviceHistory, Endpoint, CustomGroup, Alarm, Incident,
   VLAN, ActionJob, ImpactEstimate, AuditLog, SoundProfile,
-  DisplayDevice, DashboardSummary, ProblemDevice,
+  DisplayDevice, DashboardSummary, ProblemDevice, AvailabilityReport,
 } from '../types';
 
 const API_BASE = '/api';
@@ -125,23 +125,30 @@ export const api = {
 
   // FortiGate & VLAN Control
   getVlans: () => request<VLAN[]>('/vlans'),
+  syncVlansFromFirewall: () =>
+    request<{ status: string; synced_count: number; vlans: VLAN[] }>('/vlans/sync', {
+      method: 'POST',
+    }),
   getVlan: (id: number | string) => request<VLAN>(`/vlans/${id}`),
   getVlanImpact: (id: number | string, action: 'DISABLE' | 'ENABLE') =>
     request<ImpactEstimate>(`/vlans/${id}/impact?action=${action}`),
-  disableVlanInternet: (id: number | string, reason: string) =>
+  disableVlanInternet: (id: number | string, reason: string, password?: string) =>
     request<ActionJob>(`/vlans/${id}/internet/disable`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, password }),
     }),
-  enableVlanInternet: (id: number | string, reason: string) =>
+  enableVlanInternet: (id: number | string, reason: string, password?: string) =>
     request<ActionJob>(`/vlans/${id}/internet/enable`, {
       method: 'POST',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, password }),
     }),
   getFirewallStatus: () => request<unknown>('/firewall'),
   getActions: () => request<ActionJob[]>('/actions'),
-  rollbackAction: (id: string) =>
-    request<ActionJob>(`/actions/${id}/rollback`, { method: 'POST' }),
+  rollbackAction: (id: string, password?: string) =>
+    request<ActionJob>(`/actions/${id}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
 
   // Audit & Reports
   getAuditLogs: (action?: string) => {
@@ -149,7 +156,7 @@ export const api = {
     if (action) params.set('action', action);
     return request<AuditLog[]>(`/audit?${params.toString()}`);
   },
-  getAvailabilityReport: () => request<unknown>('/reports/availability'),
+  getAvailabilityReport: () => request<AvailabilityReport>('/reports/availability'),
   getLLPReport: (provider?: string, range?: string) => {
     const params = new URLSearchParams();
     if (provider) params.set('provider', provider);
@@ -174,9 +181,10 @@ export const api = {
     }),
 
   // Users & Settings
+  getRoles: () => request<Role[]>('/roles'),
   getUsers: () => request<User[]>('/users'),
   createUser: (user: Record<string, unknown>) =>
-    request<{ id: string; username: string }>('/users', {
+    request<{ id: string; username: string; email: string; role_id: string; status: string }>('/users', {
       method: 'POST',
       body: JSON.stringify(user),
     }),
@@ -184,6 +192,15 @@ export const api = {
     request<{ status: string }>(`/users/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(changes),
+    }),
+  deleteUser: (id: string) =>
+    request<{ status: string; id: string }>(`/users/${id}`, {
+      method: 'DELETE',
+    }),
+  resetUserPassword: (id: string, data?: { new_password?: string; must_change_password?: boolean }) =>
+    request<{ status: string; temporary_password: string; must_change: boolean }>(`/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
     }),
   getSettings: () => request<Record<string, string>>('/settings'),
   updateSettings: (settings: Record<string, string>) =>

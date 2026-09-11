@@ -13,7 +13,13 @@ import { Device } from '../types';
 export const OperatorLayout: React.FC = () => {
   const location = useLocation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+
+  // Close mobile sidebar whenever route changes
+  React.useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [location.pathname]);
 
   // Initialize real-time WebSocket connection
   useNocWebSocket();
@@ -70,17 +76,20 @@ export const OperatorLayout: React.FC = () => {
       <OperatorHeader
         user={user}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
         integrations={summary?.integrations_health}
         activeCriticalAlarms={summary?.active_critical_alarms}
         dataFreshness={summary?.data_freshness}
       />
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-w-0">
         <Sidebar
           activeAlarmsCount={summary?.active_critical_alarms}
           activeIncidentsCount={summary?.active_incidents}
+          isOpen={isMobileNavOpen}
+          onClose={() => setIsMobileNavOpen(false)}
         />
-        <main className="flex-1 overflow-x-hidden">
+        <main className="flex-1 min-w-0 overflow-x-hidden">
           <Outlet />
         </main>
       </div>

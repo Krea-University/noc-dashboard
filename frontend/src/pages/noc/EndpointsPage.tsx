@@ -238,9 +238,9 @@ export const EndpointsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-5 space-y-5 max-w-[1720px] mx-auto text-slate-200">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 max-w-[1720px] mx-auto text-slate-200">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
@@ -248,10 +248,10 @@ export const EndpointsPage: React.FC = () => {
             </span>
             <span className="text-xs text-slate-500 font-mono">Endpoint Central 11.3</span>
           </div>
-          <h1 className="text-xl font-black text-white flex items-center gap-2.5 mt-1">
+          <h1 className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5 mt-1">
             <Monitor className="w-5 h-5 text-amber-400" /> Endpoint Central Inventory & Custom Groups
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
             Academic Labs, Smart Classrooms, Faculty & Administrative Workstations across Krea University
           </p>
         </div>
@@ -279,7 +279,7 @@ export const EndpointsPage: React.FC = () => {
             }`}
           >
             <Laptop className="w-3.5 h-3.5" />
-            Workstation Inventory ({endpoints?.length ?? 406})
+            Workstation Inventory ({endpoints?.length ?? 0})
           </button>
 
           <button
@@ -305,34 +305,34 @@ export const EndpointsPage: React.FC = () => {
       </div>
 
       {/* Top 5 KPI Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         <div className="noc-card p-3.5 rounded-xl border-t-2 border-t-amber-500 bg-[#0a101d]">
           <span className="text-slate-400 text-[10px] uppercase font-bold">Total Managed Assets</span>
-          <div className="text-2xl font-black text-white font-mono mt-0.5">
-            {summary?.endpoints_total ?? endpoints?.length ?? 406}
+          <div className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">
+            {summary?.endpoints_total ?? endpoints?.length ?? 0}
           </div>
           <div className="text-[10px] text-slate-400 font-mono mt-1">ManageEngine Agent</div>
         </div>
 
         <div className="noc-card p-3.5 rounded-xl border-t-2 border-t-emerald-500 bg-[#0a101d]">
           <span className="text-slate-400 text-[10px] uppercase font-bold">Active & Online</span>
-          <div className="text-2xl font-black text-emerald-400 font-mono mt-0.5">
-            {summary?.endpoints_online ?? 245}
+          <div className="text-xl sm:text-2xl font-black text-emerald-400 font-mono mt-0.5">
+            {summary?.endpoints_online ?? endpoints?.filter(e => e.status === 'ONLINE').length ?? 0}
           </div>
           <div className="text-[10px] text-emerald-400 font-mono mt-1">Live Heartbeat Ping</div>
         </div>
 
         <div className="noc-card p-3.5 rounded-xl border-t-2 border-t-slate-500 bg-[#0a101d]">
           <span className="text-slate-400 text-[10px] uppercase font-bold">Offline / Standby</span>
-          <div className="text-2xl font-black text-slate-300 font-mono mt-0.5">
-            {summary?.endpoints_offline ?? 161}
+          <div className="text-xl sm:text-2xl font-black text-slate-300 font-mono mt-0.5">
+            {summary?.endpoints_offline ?? endpoints?.filter(e => e.status === 'OFFLINE').length ?? 0}
           </div>
           <div className="text-[10px] text-slate-400 font-mono mt-1">Inactive &gt; 2 hours</div>
         </div>
 
         <div className="noc-card p-3.5 rounded-xl border-t-2 border-t-indigo-500 bg-[#0a101d]">
           <span className="text-slate-400 text-[10px] uppercase font-bold">Active Groups</span>
-          <div className="text-2xl font-black text-indigo-400 font-mono mt-0.5">
+          <div className="text-xl sm:text-2xl font-black text-indigo-400 font-mono mt-0.5">
             {groupSummaries.length} Groups
           </div>
           <div className="text-[10px] text-indigo-300 font-mono mt-1">
@@ -342,7 +342,7 @@ export const EndpointsPage: React.FC = () => {
 
         <div className="noc-card p-3.5 rounded-xl border-t-2 border-t-blue-500 bg-[#0a101d]">
           <span className="text-slate-400 text-[10px] uppercase font-bold">Patch Compliance</span>
-          <div className="text-2xl font-black text-blue-400 font-mono mt-0.5">99.2%</div>
+          <div className="text-xl sm:text-2xl font-black text-blue-400 font-mono mt-0.5">99.2%</div>
           <div className="text-[10px] text-blue-300 font-mono mt-1">Antivirus Current</div>
         </div>
       </div>
@@ -352,7 +352,7 @@ export const EndpointsPage: React.FC = () => {
       {/* ========================================================= */}
       {activeTab === 'groups' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <FolderTree className="w-4 h-4 text-amber-400" />
               <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
@@ -368,8 +368,8 @@ export const EndpointsPage: React.FC = () => {
           </div>
 
           <div className="noc-card rounded-xl border-slate-800 overflow-hidden bg-[#0a101d]">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="overflow-x-auto table-scroll-container">
+              <table className="w-full text-left text-xs text-slate-300 min-w-[720px]">
                 <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold text-[10.5px] border-b border-slate-800">
                   <tr>
                     <th className="py-3 px-4 font-bold text-slate-200">Name</th>
@@ -661,8 +661,8 @@ export const EndpointsPage: React.FC = () => {
 
           {/* Main Table */}
           <div className="noc-card rounded-xl border-slate-800 overflow-hidden bg-[#0a101d]">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="overflow-x-auto table-scroll-container">
+              <table className="w-full text-left text-xs text-slate-300 min-w-[760px]">
                 <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold text-[10.5px] border-b border-slate-800">
                   <tr>
                     <th className="py-2.5 px-3">Status</th>

@@ -98,40 +98,40 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs flex justify-end">
-      <div className="w-full max-w-xl bg-slate-950 border-l border-slate-800 shadow-2xl h-full flex flex-col justify-between overflow-y-auto">
+      <div className="w-full max-w-full sm:max-w-xl bg-slate-950 border-l border-slate-800 shadow-2xl h-full flex flex-col justify-between overflow-y-auto">
         {/* Header matching reference mockup */}
-        <div className="p-5 border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur z-10">
+        <div className="p-3.5 sm:p-5 border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur z-10">
           <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 shrink-0">
                 {getDeviceIcon()}
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${statusColor}`}>
                     {device.status}
                   </span>
                   <span className="text-xs font-mono text-slate-400">{device.category_code}</span>
                   <span className="text-xs text-slate-500">•</span>
-                  <span className="text-xs text-slate-400">{device.vendor || 'Cisco / ZKTeco'}</span>
+                  <span className="text-xs text-slate-400 truncate">{device.vendor || 'Cisco / ZKTeco'}</span>
                 </div>
-                <h2 className="text-lg font-black text-slate-100">{device.name}</h2>
-                <div className="text-xs font-mono text-slate-400 mt-0.5 flex items-center gap-3">
+                <h2 className="text-base sm:text-lg font-black text-slate-100 truncate">{device.name}</h2>
+                <div className="text-xs font-mono text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                   <span>IP: {device.ip_address}</span>
-                  {device.mac_address && <span>MAC: {device.mac_address}</span>}
+                  {device.mac_address && <span className="hidden sm:inline">MAC: {device.mac_address}</span>}
                 </div>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors shrink-0 ml-2"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-1 mt-4 pt-3 border-t border-slate-800/80">
+          <div className="flex items-center gap-1 mt-4 pt-3 border-t border-slate-800/80 overflow-x-auto scrollbar-none pb-0.5">
             {[
               { key: 'overview', label: 'Overview' },
               { key: 'monitors', label: 'Monitors & Telemetry' },
@@ -141,7 +141,7 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 font-bold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -153,8 +153,8 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
           </div>
         </div>
 
-        {/* Content Body based on activeTab */}
-        <div className="p-5 space-y-4 flex-1">
+        {/* Tab 1: Overview */}
+        <div className="p-3.5 sm:p-6 space-y-5 flex-1">
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <>

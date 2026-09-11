@@ -1,4 +1,4 @@
-﻿package fortigate
+package fortigate
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -297,7 +298,30 @@ func (c *Client) GetStatus(ctx context.Context) (*integrations.FirewallStatusDTO
 }
 
 func (c *Client) GetVlans(ctx context.Context) ([]models.VLAN, error) {
-	// Query configured firewall policies controlling VLAN egress
+	// 1. Fetch address objects to resolve subnets and gateways
+	addrMap := make(map[string]string) // addrName -> "ip netmask"
+	addrURL := fmt.Sprintf("%s/api/v2/cmdb/firewall/address", c.baseURL)
+	if addrReq, err := http.NewRequestWithContext(ctx, "GET", addrURL, nil); err == nil {
+		addrReq.Header.Set("Authorization", "Bearer "+c.apiToken)
+		if addrResp, err := c.httpClient.Do(addrReq); err == nil {
+			defer addrResp.Body.Close()
+			var addrData struct {
+				Results []struct {
+					Name   string `json:"name"`
+					Subnet string `json:"subnet"`
+				} `json:"results"`
+			}
+			if err := json.NewDecoder(addrResp.Body).Decode(&addrData); err == nil {
+				for _, a := range addrData.Results {
+					if a.Name != "" && a.Subnet != "" && a.Subnet != "0.0.0.0 0.0.0.0" {
+						addrMap[a.Name] = a.Subnet
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Query configured firewall policies controlling VLAN egress
 	reqURL := fmt.Sprintf("%s/api/v2/cmdb/firewall/policy", c.baseURL)
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
@@ -322,6 +346,15 @@ func (c *Client) GetVlans(ctx context.Context) ([]models.VLAN, error) {
 			Name     string `json:"name"`
 			Status   string `json:"status"` // enable / disable
 			Comments string `json:"comments"`
+			SrcIntf  []struct {
+				Name string `json:"name"`
+			} `json:"srcintf"`
+			DstIntf  []struct {
+				Name string `json:"name"`
+			} `json:"dstintf"`
+			SrcAddr  []struct {
+				Name string `json:"name"`
+			} `json:"srcaddr"`
 		} `json:"results"`
 	}
 
@@ -331,19 +364,139 @@ func (c *Client) GetVlans(ctx context.Context) ([]models.VLAN, error) {
 
 	var vlans []models.VLAN
 	for _, p := range raw.Results {
+		// Filter for policies connecting LAN to WAN or known VLAN policies
+		isLanToWan := false
+		for _, s := range p.SrcIntf {
+			if strings.Contains(strings.ToUpper(s.Name), "LAN") {
+				for _, d := range p.DstIntf {
+					if strings.Contains(strings.ToUpper(d.Name), "WAN") {
+						isLanToWan = true
+						break
+					}
+				}
+			}
+		}
+
+		if !isLanToWan && !isKnownVlanPolicy(p.PolicyID, p.Name) {
+			continue
+		}
+
 		internetStatus := "ENABLED"
 		if p.Status == "disable" {
 			internetStatus = "DISABLED"
 		}
+
+		subnet := ""
+		gateway := ""
+		vlanID := 0
+
+		for _, sa := range p.SrcAddr {
+			if sub, ok := addrMap[sa.Name]; ok {
+				cidr, gw := parseSubnetCIDR(sub)
+				if cidr != "" {
+					subnet = cidr
+					gateway = gw
+					vlanID = extractVlanIDFromSubnetOrName(cidr, sa.Name, p.Name)
+					break
+				}
+			}
+		}
+
+		if vlanID == 0 {
+			vlanID = extractVlanIDFromSubnetOrName(subnet, p.Name, "")
+		}
+		if vlanID == 0 {
+			vlanID = p.PolicyID
+		}
+
 		vlans = append(vlans, models.VLAN{
-			FortiGatePolicyID: p.PolicyID,
+			ID:                fmt.Sprintf("vlan_%d", vlanID),
+			VlanID:            vlanID,
 			Name:              p.Name,
 			InternetStatus:    internetStatus,
 			Description:       p.Comments,
+			Subnet:            subnet,
+			Gateway:           gateway,
+			FortiGatePolicyID: p.PolicyID,
 		})
 	}
 
 	return vlans, nil
+}
+
+func isKnownVlanPolicy(policyID int, name string) bool {
+	switch policyID {
+	case 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 56, 57, 58, 62, 63, 64, 65, 70:
+		return true
+	}
+	n := strings.ToLower(name)
+	return strings.Contains(n, "wifi") || strings.Contains(n, "vlan") || strings.Contains(n, "radius") || strings.Contains(n, "biometric")
+}
+
+func parseSubnetCIDR(ipMask string) (string, string) {
+	parts := strings.Fields(ipMask)
+	if len(parts) != 2 {
+		return ipMask, ""
+	}
+	ip := parts[0]
+	maskParts := strings.Split(parts[1], ".")
+	if len(maskParts) != 4 {
+		return ip, ""
+	}
+	ones := 0
+	for _, mp := range maskParts {
+		b, err := strconv.Atoi(mp)
+		if err != nil {
+			return ip, ""
+		}
+		for b > 0 {
+			ones += b & 1
+			b >>= 1
+		}
+	}
+	cidr := fmt.Sprintf("%s/%d", ip, ones)
+
+	ipParts := strings.Split(ip, ".")
+	gateway := ""
+	if len(ipParts) == 4 {
+		gateway = fmt.Sprintf("%s.%s.%s.1", ipParts[0], ipParts[1], ipParts[2])
+	}
+	return cidr, gateway
+}
+
+func extractVlanIDFromSubnetOrName(cidr, addrName, policyName string) int {
+	// Try finding digits after "VLAN"
+	for _, s := range []string{addrName, policyName} {
+		upper := strings.ToUpper(s)
+		if idx := strings.Index(upper, "VLAN"); idx != -1 {
+			rem := upper[idx+4:]
+			var numStr strings.Builder
+			for _, r := range rem {
+				if r >= '0' && r <= '9' {
+					numStr.WriteRune(r)
+				} else if numStr.Len() > 0 {
+					break
+				}
+			}
+			if numStr.Len() > 0 {
+				if n, err := strconv.Atoi(numStr.String()); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
+
+	// Try extracting from 10.10.X.0
+	if strings.HasPrefix(cidr, "10.10.") {
+		parts := strings.Split(cidr, ".")
+		if len(parts) >= 3 {
+			if n, err := strconv.Atoi(parts[2]); err == nil && n > 0 {
+				return n
+			}
+		}
+	}
+
+	return 0
 }
 
 func (c *Client) DisableInternet(ctx context.Context, vlanID int, policyID int, reason string) (*integrations.FortiGateActionResult, error) {

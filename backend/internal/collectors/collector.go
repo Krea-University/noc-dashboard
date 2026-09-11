@@ -298,12 +298,12 @@ func (m *CollectorManager) syncFortiGate() {
 				}
 			}
 		} else if status.InboundBPS > 0 || status.OutboundBPS > 0 {
-			tataIn := int64(float64(status.InboundBPS) * 0.58)
-			tataOut := int64(float64(status.OutboundBPS) * 0.58)
+			railtelIn := int64(float64(status.InboundBPS) * 0.58)
+			railtelOut := int64(float64(status.OutboundBPS) * 0.58)
 			airtelIn := int64(float64(status.InboundBPS) * 0.42)
 			airtelOut := int64(float64(status.OutboundBPS) * 0.42)
 
-			m.upsertInterface("if_01", fgDevID, "x3 (Uplink to Railtel ILL 3Gbps)", 3000000000, "UP", tataIn, tataOut, now)
+			m.upsertInterface("if_01", fgDevID, "x3 (Uplink to Railtel ILL 3Gbps)", 3000000000, "UP", railtelIn, railtelOut, now)
 			m.upsertInterface("if_02", fgDevID, "x4 (Uplink to Airtel ILL 1.2Gbps)", 1200000000, "UP", airtelIn, airtelOut, now)
 		}
 	}

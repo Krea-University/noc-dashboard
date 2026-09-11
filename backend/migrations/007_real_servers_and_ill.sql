@@ -34,13 +34,7 @@ INSERT INTO devices (
 ('dev_srv_zk', 'srv_10_10_3_50', 'internal', 'SRV-BIOMETRIC-ZK-01', '10.10.3.50', '18:66:da:53:22:fe', 'SERVER',
  'ZKTeco BioSecurity Host', 'Dell Technologies', 'PowerEdge T340', 'UP', 99.90, 1, 21.3, 58.7, 44.9,
  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON DUPLICATE KEY UPDATE 
-    status = VALUES(status),
-    cpu_pct = VALUES(cpu_pct),
-    mem_pct = VALUES(mem_pct),
-    disk_pct = VALUES(disk_pct),
-    last_seen_at = VALUES(last_seen_at),
-    updated_at = VALUES(updated_at);
+ON CONFLICT(id) DO NOTHING;
 
 -- 2. Insert Real Krea Internet Leased Line Links (ILL)
 INSERT INTO devices (
@@ -59,9 +53,4 @@ INSERT INTO devices (
 ('dev_ill_bsnl', 'ill_port2', 'fortigate', 'ILL-BSNL-BACKUP', '117.218.44.1', '70:4c:a5:88:14:02', 'ILL',
  'Failover Leased Line (500 Mbps)', 'BSNL Broadband', 'Gigabit Ethernet (port2)', 'UP', 99.80, 7, 0.0, 0.0, 0.0,
  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON DUPLICATE KEY UPDATE 
-    status = VALUES(status),
-    availability_pct = VALUES(availability_pct),
-    response_time_ms = VALUES(response_time_ms),
-    last_seen_at = VALUES(last_seen_at),
-    updated_at = VALUES(updated_at);
+ON CONFLICT(id) DO NOTHING;

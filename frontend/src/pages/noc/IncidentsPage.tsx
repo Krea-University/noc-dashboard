@@ -48,17 +48,17 @@ export const IncidentsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       <div>
-        <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-          <AlertOctagon className="w-6 h-6 text-amber-400" /> Operational Incidents
+        <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+          <AlertOctagon className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" /> Operational Incidents
         </h1>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
           Automated Correlated Outages & Infrastructure Incidents Lifecycle Management
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
         {incidents && incidents.length > 0 ? (
           incidents.map((inc) => {
             const isCrit = inc.severity === 'CRITICAL';
@@ -66,7 +66,7 @@ export const IncidentsPage: React.FC = () => {
               <div
                 key={inc.id}
                 onClick={() => openIncidentModal(inc)}
-                className="noc-card noc-card-hover p-5 cursor-pointer space-y-3 flex flex-col justify-between"
+                className="noc-card noc-card-hover p-4 sm:p-5 cursor-pointer space-y-3 flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -96,7 +96,7 @@ export const IncidentsPage: React.FC = () => {
             );
           })
         ) : (
-          <div className="col-span-3 py-16 text-center text-xs text-slate-500 italic">
+          <div className="col-span-full py-16 text-center text-xs text-slate-500 italic">
             No active operational incidents.
           </div>
         )}
@@ -104,8 +104,8 @@ export const IncidentsPage: React.FC = () => {
 
       {/* Incident Detail Modal */}
       {selectedIncident && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 text-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 sm:p-4">
+          <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 sm:p-6 text-slate-100 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between border-b border-slate-800 pb-3">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -116,7 +116,7 @@ export const IncidentsPage: React.FC = () => {
                     {selectedIncident.severity}
                   </span>
                 </div>
-                <h2 className="text-lg font-bold text-slate-100">{selectedIncident.title}</h2>
+                <h2 className="text-base sm:text-lg font-bold text-slate-100">{selectedIncident.title}</h2>
               </div>
               <button
                 onClick={() => setSelectedIncident(null)}
@@ -129,11 +129,11 @@ export const IncidentsPage: React.FC = () => {
             <p className="text-xs text-slate-300">{selectedIncident.description}</p>
 
             {/* Status Transition Buttons */}
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2.5">
               <span className="text-slate-400">
                 Current Status: <strong className="text-slate-200">{selectedIncident.status}</strong>
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 {['ACKNOWLEDGED', 'INVESTIGATING', 'RESOLVED', 'CLOSED'].map((st) => (
                   <button
                     key={st}

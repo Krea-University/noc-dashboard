@@ -49,20 +49,20 @@ export const NetworkPage: React.FC = () => {
   }, [devices]);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header & Filter Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-            <Network className="w-6 h-6 text-blue-400" /> Network Infrastructure
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+            <Network className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /> Network Infrastructure
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
             OpManager Monitored Core, Distribution, Access Switches, Aruba/Ruckus APs & Leased Lines
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          <div className="relative flex-1 sm:flex-none">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
             <input
               type="text"
@@ -72,7 +72,7 @@ export const NetworkPage: React.FC = () => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="pl-9 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:border-blue-500 focus:outline-none w-56"
+              className="pl-9 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:border-blue-500 focus:outline-none w-full sm:w-56"
             />
             {search && (
               <button
@@ -125,7 +125,7 @@ export const NetworkPage: React.FC = () => {
           </button>
         ))}
 
-        <div className="ml-auto flex items-center gap-4 text-xs font-mono">
+        <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2.5 sm:gap-4 text-xs font-mono pt-1 sm:pt-0">
           <span className="text-slate-400">Total: <strong className="text-slate-200">{totalItems}</strong></span>
           <span className="text-emerald-400 font-bold">{counts.up} UP</span>
           <span className="text-red-400 font-bold">{counts.down} DOWN</span>
@@ -135,8 +135,8 @@ export const NetworkPage: React.FC = () => {
 
       {/* Network Devices Table */}
       <div className="noc-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div className="overflow-x-auto table-scroll-container">
+          <table className="w-full text-left text-xs text-slate-300 min-w-[720px]">
             <thead className="bg-slate-900 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4">Status</th>

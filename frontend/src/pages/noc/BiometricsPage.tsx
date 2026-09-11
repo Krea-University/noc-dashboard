@@ -42,19 +42,19 @@ export const BiometricsPage: React.FC = () => {
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header & KPI Summary */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-            <Fingerprint className="w-6 h-6 text-purple-400" /> Campus Biometric Attendance Readers
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+            <Fingerprint className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" /> Campus Biometric Attendance Readers
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
             OpManager Lite Monitored Devices across Hostels, Academic Blocks, Library, Diners & Security Gates
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-xs">
             <span className="text-slate-400">Total: <strong className="text-slate-100">{total}</strong></span>
             <span className="text-emerald-400 font-bold">{upCount} UP</span>
@@ -83,7 +83,7 @@ export const BiometricsPage: React.FC = () => {
             ))}
           </div>
 
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
             <input
               type="text"
@@ -93,7 +93,7 @@ export const BiometricsPage: React.FC = () => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="pl-9 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:border-purple-500 focus:outline-none w-56"
+              className="pl-9 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:border-purple-500 focus:outline-none w-full sm:w-56"
             />
             {search && (
               <button
@@ -108,7 +108,7 @@ export const BiometricsPage: React.FC = () => {
       </div>
 
       {/* Biometric Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
         {paginated.map((bio) => {
           const isUp = bio.status === 'UP';
           return (

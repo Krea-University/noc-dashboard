@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette } from 'lucide-react';
+import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import { SoundProfile } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
 
 export const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const [simulationMsg, setSimulationMsg] = useState('');
   const [simLoading, setSimLoading] = useState(false);
@@ -34,10 +36,10 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 md:space-y-8 max-w-[1600px] mx-auto">
       <div>
-        <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-          <Settings className="w-6 h-6 text-slate-400" /> Command Center Settings & Live Drills
+        <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+          <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 shrink-0" /> Command Center Settings & Live Drills
         </h1>
         <p className="text-xs text-slate-400 mt-1">
           System Polling Intervals, Display Wall Retention, Appearance & Outage Simulation Suite
@@ -45,17 +47,17 @@ export const SettingsPage: React.FC = () => {
       </div>
 
       {/* Theme & Appearance Configuration */}
-      <div className="noc-card p-5 space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="noc-card p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
               <Palette className="w-4 h-4 text-cyan-400" /> Command Center Appearance & Theme
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
               Personalize your display mode. Your preference is automatically saved and remembered across sessions.
             </p>
           </div>
-          <span className="px-2.5 py-1 text-xs font-mono font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 uppercase">
+          <span className="px-2.5 py-1 text-xs font-mono font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 uppercase self-start sm:self-auto">
             Active: {theme} mode
           </span>
         </div>
@@ -117,11 +119,32 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive NOC Outage Simulation Suite (Section 61) */}
-      <div className="noc-card p-5 border-blue-500/30 bg-blue-950/10 space-y-4">
-        <div className="flex items-center justify-between">
+      {/* Operator Accounts & RBAC Card */}
+      <div className="noc-card p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-blue-300 flex items-center gap-2">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-400" /> Operator Accounts & Access Control (RBAC)
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Manage NOC operator accounts, assign permission roles (Viewer, Operator, Network Operator, Administrator), and control system access.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/noc/users')}
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 self-start sm:self-auto transition-colors shadow-sm"
+          >
+            <Users className="w-4 h-4" /> Manage User Accounts
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive NOC Outage Simulation Suite (Section 61) */}
+      <div className="noc-card p-4 sm:p-5 border-blue-500/30 bg-blue-950/10 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-300 flex items-center gap-2">
               <Play className="w-4 h-4 text-blue-400" /> NOC Simulation Suite & Flood Protection Drills
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -129,7 +152,7 @@ export const SettingsPage: React.FC = () => {
             </p>
           </div>
           {simulationMsg && (
-            <span className="px-3 py-1 rounded bg-blue-500/20 text-blue-300 text-xs font-mono font-bold border border-blue-500/30 animate-pulse">
+            <span className="px-3 py-1 rounded bg-blue-500/20 text-blue-300 text-xs font-mono font-bold border border-blue-500/30 animate-pulse self-start sm:self-auto">
               {simulationMsg}
             </span>
           )}

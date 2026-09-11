@@ -12,6 +12,21 @@ export interface User {
   permissions?: string[];
 }
 
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  permissions?: { id?: string; code: string; description?: string; module?: string }[];
+}
+
+export interface Permission {
+  id: string;
+  code: string;
+  description: string;
+  module: string;
+}
+
 export interface Device {
   id: string;
   source_id: string;
@@ -346,3 +361,57 @@ export interface ProblemDevice {
   message?: string;
   last_status_change_at?: string;
 }
+
+export interface TrendPoint {
+  date: string;
+  full_date: string;
+  availability_pct: number;
+  alarms_count: number;
+  critical_count: number;
+}
+
+export interface ZoneHealth {
+  zone: string;
+  total: number;
+  up: number;
+  down: number;
+  warning: number;
+  availability_pct: number;
+  status: 'HEALTHY' | 'DEGRADED' | 'CRITICAL';
+}
+
+export interface AvailabilityReport {
+  overall_availability_pct: number;
+  sla_compliance_pct: number;
+  sla_target_pct: number;
+  network_availability_pct: number;
+  network_devices_total: number;
+  network_devices_up: number;
+  network_devices_down: number;
+  servers_availability_pct: number;
+  servers_total: number;
+  servers_up: number;
+  servers_down: number;
+  endpoints_availability_pct: number;
+  endpoints_total: number;
+  endpoints_online: number;
+  endpoints_offline: number;
+  biometrics_availability_pct: number;
+  biometrics_total: number;
+  biometrics_up: number;
+  biometrics_down: number;
+  total_devices: number;
+  devices_up: number;
+  devices_down: number;
+  devices_warning: number;
+  mttr_minutes: number;
+  mttr_formatted?: string;
+  mttr_target_minutes: number;
+  total_incidents_30d: number;
+  active_incidents_count: number;
+  resolved_incidents_count: number;
+  uptime_trends_30d: TrendPoint[];
+  site_health_breakdown: ZoneHealth[];
+  top_problem_devices: ProblemDevice[];
+}
+

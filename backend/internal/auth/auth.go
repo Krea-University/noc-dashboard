@@ -1,4 +1,4 @@
-﻿package auth
+package auth
 
 import (
 	"crypto/rand"
@@ -211,6 +211,26 @@ func (s *Service) GetUserByID(userID string) (*models.User, error) {
 	}
 
 	return user, nil
+}
+
+// VerifyUserPassword verifies whether the supplied raw password matches the user's stored password hash.
+func (s *Service) VerifyUserPassword(userID, rawPassword string) (bool, error) {
+	if rawPassword == "" {
+		return false, errors.New("empty password")
+	}
+
+	var passwordHash string
+	var status string
+	err := s.db.QueryRow("SELECT password_hash, status FROM users WHERE id = ?", userID).Scan(&passwordHash, &status)
+	if err != nil {
+		return false, fmt.Errorf("user not found: %w", err)
+	}
+
+	if status != "ACTIVE" {
+		return false, errors.New("user account is not active")
+	}
+
+	return CheckPassword(rawPassword, passwordHash), nil
 }
 
 // GetUserByUsername retrieves a user by username.

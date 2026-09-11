@@ -364,22 +364,44 @@ export const OverviewPage: React.FC = () => {
 
   // Dynamic Campus Services status list
   const campusServices = useMemo(() => [
-    { name: 'ILL - Tata Communications', status: 'OPERATIONAL', metric: '10 Gbps Primary', ping: '2ms' },
-    { name: 'ILL - Bharti Airtel', status: 'OPERATIONAL', metric: '10 Gbps Secondary', ping: '3ms' },
-    { name: 'Campus Wi-Fi Mesh', status: 'OPERATIONAL', metric: `${summary?.network_devices_up ?? 651} APs Up`, ping: '4ms' },
-    { name: 'Core & Access Switching', status: 'OPERATIONAL', metric: `${summary?.network_devices_total ?? 703} Total`, ping: '1ms' },
-    { name: 'Campus Biometrics', status: (summary?.biometrics_down ?? 0) > 0 ? 'DEGRADED' : 'OPERATIONAL', metric: `${summary?.biometrics_up ?? 85}/${summary?.biometrics_total ?? 90} Online`, ping: '12ms' },
-    { name: 'Compute & Virtualization', status: 'OPERATIONAL', metric: `${summary?.servers_up ?? 5}/${summary?.servers_total ?? 5} Hosts Up`, ping: '1ms' },
-    { name: 'Endpoint Central Agent', status: 'OPERATIONAL', metric: `${summary?.endpoints_online ?? 185} Active`, ping: '14ms' },
+    { name: 'Railtel Primary ILL (3 Gbps)', status: 'OPERATIONAL', metric: '3 Gbps Primary', ping: '2ms' },
+    { name: 'Bharti Airtel Secondary ILL (1.2 Gbps)', status: 'OPERATIONAL', metric: '1.2 Gbps Secondary', ping: '3ms' },
+    { name: 'Campus Wi-Fi Mesh', status: 'OPERATIONAL', metric: `${summary?.network_devices_up || summary?.wireless_aps_up || 0} APs Up`, ping: '4ms' },
+    { name: 'Core & Access Switching', status: 'OPERATIONAL', metric: `${summary?.switches_total || summary?.network_devices_total || 0} Total`, ping: '1ms' },
+    { name: 'Campus Biometrics', status: (summary?.biometrics_down ?? 0) > 0 ? 'DEGRADED' : 'OPERATIONAL', metric: `${summary?.biometrics_up ?? 0}/${summary?.biometrics_total ?? 0} Online`, ping: '12ms' },
+    { name: 'Compute & Virtualization', status: 'OPERATIONAL', metric: `${summary?.servers_up ?? 0}/${summary?.servers_total ?? 0} Hosts Up`, ping: '1ms' },
+    { name: 'Endpoint Central Agent', status: 'OPERATIONAL', metric: `${summary?.endpoints_online ?? 0} Active`, ping: '14ms' },
     { name: 'FortiGate 600F Firewall', status: 'OPERATIONAL', metric: 'SD-WAN Active', ping: '2ms' },
     { name: 'ManageEngine OpManager', status: 'OPERATIONAL', metric: 'SNMP/API Live', ping: '3ms' },
     { name: 'Active Directory & DNS', status: 'OPERATIONAL', metric: 'AD01 / AD02 Sync', ping: '1ms' },
   ], [summary]);
 
+  // Compute live severity counts from incidents and alarms
+  const severityCounts = useMemo(() => {
+    let critical = 0, major = 0, warning = 0, info = 0;
+    (displayIncidents || []).forEach((inc: any) => {
+      const s = (inc.severity || '').toUpperCase();
+      if (s === 'CRITICAL') critical++;
+      else if (s === 'MAJOR') major++;
+      else if (s === 'WARNING') warning++;
+      else info++;
+    });
+    if (critical === 0 && major === 0 && (alarms || []).length > 0) {
+      (alarms || []).forEach((a: any) => {
+        const s = (a.severity || '').toUpperCase();
+        if (s === 'CRITICAL') critical++;
+        else if (s === 'MAJOR') major++;
+        else if (s === 'WARNING') warning++;
+        else info++;
+      });
+    }
+    return { critical, major, warning, info };
+  }, [displayIncidents, alarms]);
+
   return (
-    <div className="p-4 space-y-4 max-w-[1720px] mx-auto text-slate-200">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 max-w-[1720px] mx-auto text-slate-200">
       {/* 1. TOP METRIC CARDS ROW (7 Compact Cards matching screenshot) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
         {/* Sites / ILL */}
         <div
           onClick={() => navigate('/noc/network')}
@@ -390,7 +412,7 @@ export const OverviewPage: React.FC = () => {
             <Globe className="w-3.5 h-3.5 text-blue-400" />
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-white font-mono tracking-tight">3</span>
+            <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">3</span>
             <span className="text-[10px] text-slate-400 font-medium">Links</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
@@ -410,15 +432,15 @@ export const OverviewPage: React.FC = () => {
             <Network className="w-3.5 h-3.5 text-indigo-400" />
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-white font-mono tracking-tight">
-              {summary?.network_devices_total ?? 841}
+            <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+              {summary?.network_devices_total ?? 0}
             </span>
             <span className="text-[10px] text-slate-400 font-medium">Total</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-emerald-400 font-bold">{summary?.network_devices_up ?? 746} Up</span>
-            <span className="text-red-400 font-bold">{summary?.network_devices_down ?? 55} Dn</span>
-            <span className="text-amber-400 font-bold">40 Mnt</span>
+            <span className="text-emerald-400 font-bold">{summary?.network_devices_up ?? 0} Up</span>
+            <span className="text-red-400 font-bold">{summary?.network_devices_down ?? 0} Dn</span>
+            <span className="text-amber-400 font-bold">{summary?.devices_warning ?? 0} Mnt</span>
           </div>
         </div>
 
@@ -432,12 +454,14 @@ export const OverviewPage: React.FC = () => {
             <Layers className="w-3.5 h-3.5 text-cyan-400" />
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-white font-mono tracking-tight">169</span>
+            <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+              {summary?.switches_total ?? 0}
+            </span>
             <span className="text-[10px] text-slate-400 font-medium">Core/Edge</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-emerald-400 font-bold">167 Up</span>
-            <span className="text-red-400 font-bold">2 Dn</span>
+            <span className="text-emerald-400 font-bold">{summary?.switches_up ?? 0} Up</span>
+            <span className="text-red-400 font-bold">{summary?.switches_down ?? 0} Dn</span>
             <span className="text-slate-500">0 Mnt</span>
           </div>
         </div>
@@ -452,12 +476,14 @@ export const OverviewPage: React.FC = () => {
             <Wifi className="w-3.5 h-3.5 text-sky-400" />
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
-            <span className="text-2xl font-black text-white font-mono tracking-tight">577</span>
+            <span className="text-2xl font-black text-white font-mono tracking-tight">
+              {summary?.wireless_aps_total ?? 0}
+            </span>
             <span className="text-[10px] text-slate-400 font-medium">Access Points</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-emerald-400 font-bold">524 Up</span>
-            <span className="text-red-400 font-bold">53 Dn</span>
+            <span className="text-emerald-400 font-bold">{summary?.wireless_aps_up ?? 0} Up</span>
+            <span className="text-red-400 font-bold">{summary?.wireless_aps_down ?? 0} Dn</span>
             <span className="text-slate-500">0 Mnt</span>
           </div>
         </div>
@@ -473,12 +499,12 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-white font-mono tracking-tight">
-              {summary?.servers_total ?? 6}
+              {summary?.servers_total ?? 0}
             </span>
             <span className="text-[10px] text-slate-400 font-medium">Compute</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-emerald-400 font-bold">{summary?.servers_up ?? 6} Up</span>
+            <span className="text-emerald-400 font-bold">{summary?.servers_up ?? 0} Up</span>
             <span className="text-slate-500">{summary?.servers_down ?? 0} Dn</span>
             <span className="text-emerald-400 font-bold">100%</span>
           </div>
@@ -495,13 +521,13 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-white font-mono tracking-tight">
-              {summary?.endpoints_total ?? 466}
+              {summary?.endpoints_total ?? 0}
             </span>
             <span className="text-[10px] text-slate-400 font-medium">Nodes</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-sky-400 font-bold">{summary?.endpoints_online ?? 278} On</span>
-            <span className="text-slate-500">{summary?.endpoints_offline ?? 188} Off</span>
+            <span className="text-sky-400 font-bold">{summary?.endpoints_online ?? 0} On</span>
+            <span className="text-slate-500">{summary?.endpoints_offline ?? 0} Off</span>
             <span className="text-amber-400 font-bold">96% Ptc</span>
           </div>
         </div>
@@ -517,14 +543,16 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="my-1.5 flex items-baseline gap-1.5">
             <span className="text-2xl font-black text-white font-mono tracking-tight">
-              {summary?.biometrics_total ?? 90}
+              {summary?.biometrics_total ?? 0}
             </span>
             <span className="text-[10px] text-slate-400 font-medium">ZKTeco</span>
           </div>
           <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
-            <span className="text-emerald-400 font-bold">{summary?.biometrics_up ?? 85} Up</span>
-            <span className="text-red-400 font-bold">{summary?.biometrics_down ?? 5} Dn</span>
-            <span className="text-purple-400 font-bold">94.4%</span>
+            <span className="text-emerald-400 font-bold">{summary?.biometrics_up ?? 0} Up</span>
+            <span className="text-red-400 font-bold">{summary?.biometrics_down ?? 0} Dn</span>
+            <span className="text-purple-400 font-bold">
+              {summary?.biometrics_total ? ((summary.biometrics_up / Math.max(1, summary.biometrics_total)) * 100).toFixed(1) : '95.5'}%
+            </span>
           </div>
         </div>
       </div>
@@ -551,19 +579,19 @@ export const OverviewPage: React.FC = () => {
             <div className="grid grid-cols-4 gap-2 mb-3">
               <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-center">
                 <div className="text-[10px] uppercase font-bold text-red-400">Critical</div>
-                <div className="text-lg font-black text-red-300 font-mono">3</div>
+                <div className="text-lg font-black text-red-300 font-mono">{severityCounts.critical}</div>
               </div>
               <div className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/30 text-center">
                 <div className="text-[10px] uppercase font-bold text-orange-400">Major</div>
-                <div className="text-lg font-black text-orange-300 font-mono">7</div>
+                <div className="text-lg font-black text-orange-300 font-mono">{severityCounts.major}</div>
               </div>
               <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
                 <div className="text-[10px] uppercase font-bold text-amber-400">Warning</div>
-                <div className="text-lg font-black text-amber-300 font-mono">12</div>
+                <div className="text-lg font-black text-amber-300 font-mono">{severityCounts.warning}</div>
               </div>
               <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-center">
                 <div className="text-[10px] uppercase font-bold text-blue-400">Info</div>
-                <div className="text-lg font-black text-blue-300 font-mono">0</div>
+                <div className="text-lg font-black text-blue-300 font-mono">{severityCounts.info}</div>
               </div>
             </div>
 
@@ -614,17 +642,17 @@ export const OverviewPage: React.FC = () => {
             </div>
 
             {/* Inbound / Outbound Stats Pill Row */}
-            <div className="flex items-center justify-between text-[11px] font-mono px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-850 mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] font-mono px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-850 mb-2 gap-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_6px_#3b82f6]" />
-                <span className="text-slate-400">Inbound Throughput:</span>
+                <span className="text-slate-400">Inbound:</span>
                 <strong className="text-blue-400">
                   {formatBps(summary?.inbound_traffic_bps || fw.inbound_bps, '1.41 Gbps')}
                 </strong>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]" />
-                <span className="text-slate-400">Outbound Throughput:</span>
+                <span className="text-slate-400">Outbound:</span>
                 <strong className="text-emerald-400">
                   {formatBps(summary?.outbound_traffic_bps || fw.outbound_bps, '366.6 Mbps')}
                 </strong>
@@ -735,7 +763,7 @@ export const OverviewPage: React.FC = () => {
                 onClick={() => navigate('/noc/biometrics')}
                 className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 font-semibold"
               >
-                View All (90) <ChevronRight className="w-3 h-3" />
+                View All ({summary?.biometrics_total ?? biometricsList.length}) <ChevronRight className="w-3 h-3" />
               </button>
             </div>
 
@@ -747,11 +775,11 @@ export const OverviewPage: React.FC = () => {
               <div className="flex-1 space-y-1.5 text-xs font-mono">
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Online:</span>
-                  <span className="text-emerald-400 font-bold">{summary?.biometrics_up ?? 85}</span>
+                  <span className="text-emerald-400 font-bold">{summary?.biometrics_up ?? biometricsList.filter((b: any) => b.status === 'UP').length}</span>
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Offline:</span>
-                  <span className="text-red-400 font-bold">{summary?.biometrics_down ?? 5}</span>
+                  <span className="text-red-400 font-bold">{summary?.biometrics_down ?? biometricsList.filter((b: any) => b.status === 'DOWN').length}</span>
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Sync Rate:</span>
@@ -792,7 +820,7 @@ export const OverviewPage: React.FC = () => {
                 ))
               ) : (
                 <div className="py-3 text-center text-[10px] text-slate-500 italic">
-                  Monitoring {summary?.biometrics_total ?? 90} biometric readers...
+                  Monitoring {summary?.biometrics_total ?? biometricsList.length} biometric readers...
                 </div>
               )}
             </div>
@@ -811,7 +839,7 @@ export const OverviewPage: React.FC = () => {
                 onClick={() => navigate('/noc/endpoints')}
                 className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 font-semibold"
               >
-                View All ({summary?.endpoints_total ?? 409}) <ChevronRight className="w-3 h-3" />
+                View All ({summary?.endpoints_total ?? endpointsList.length}) <ChevronRight className="w-3 h-3" />
               </button>
             </div>
 
@@ -827,11 +855,11 @@ export const OverviewPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Online Workstations:</span>
-                  <span className="text-sky-400 font-bold">{summary?.endpoints_online ?? 185}</span>
+                  <span className="text-sky-400 font-bold">{summary?.endpoints_online ?? endpointsList.filter((e: any) => e.status === 'ONLINE').length}</span>
                 </div>
                 <div className="flex justify-between items-center p-1 px-2 rounded bg-slate-900 border border-slate-850">
                   <span className="text-slate-400 text-[11px]">Offline Workstations:</span>
-                  <span className="text-slate-400 font-bold">{summary?.endpoints_offline ?? 224}</span>
+                  <span className="text-slate-400 font-bold">{summary?.endpoints_offline ?? endpointsList.filter((e: any) => e.status === 'OFFLINE').length}</span>
                 </div>
               </div>
             </div>
@@ -966,8 +994,8 @@ export const OverviewPage: React.FC = () => {
         </div>
 
         {/* Table of Alarms */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div className="overflow-x-auto table-scroll-container">
+          <table className="w-full text-left text-xs text-slate-300 min-w-[700px]">
             <thead className="bg-slate-900/80 text-slate-400 uppercase font-semibold text-[10.5px] border-b border-slate-800">
               <tr>
                 <th className="py-2 px-3">Time</th>

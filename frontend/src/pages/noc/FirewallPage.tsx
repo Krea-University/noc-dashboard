@@ -17,15 +17,15 @@ export const FirewallPage: React.FC = () => {
   });
 
   const fw = (status as Record<string, unknown>) || {};
-  const activeSessions = Number(fw.active_sessions || 108585);
-  const cpuPct = Number(fw.cpu_pct ?? 2);
-  const memPct = Number(fw.mem_pct ?? 36);
+  const activeSessions = Number(fw.active_sessions || 0);
+  const cpuPct = Number(fw.cpu_pct ?? 0);
+  const memPct = Number(fw.mem_pct ?? 0);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       <div>
-        <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-          <Shield className="w-6 h-6 text-blue-400" /> FortiGate-600F Enterprise Firewall
+        <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+          <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 shrink-0" /> FortiGate-600F Enterprise Firewall
         </h1>
         <p className="text-xs text-slate-400 mt-1">
           Campus Perimeter Gateway • Next-Gen Firewall Telemetry • Active Stateful Sessions • VLAN Internet Policies
@@ -33,11 +33,11 @@ export const FirewallPage: React.FC = () => {
       </div>
 
       {/* Primary KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div className="noc-card p-4 space-y-1 border-slate-800">
           <span className="text-xs text-slate-400 font-semibold uppercase">Appliance Hostname</span>
           <div className="text-base font-bold text-slate-100 font-mono">
-            {String(fw.hostname || 'KREA-UNIV-FW')}
+            {String(fw.hostname || (isLoading ? 'Loading...' : 'FortiGate-600F'))}
           </div>
           <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5" /> High Availability Active (HA Mode)
@@ -47,7 +47,7 @@ export const FirewallPage: React.FC = () => {
         <div className="noc-card p-4 space-y-1 border-slate-800">
           <span className="text-xs text-slate-400 font-semibold uppercase">Firmware OS Version</span>
           <div className="text-base font-bold text-slate-100 font-mono">
-            {String(fw.version ? `FortiOS ${fw.version}` : 'FortiOS v7.4.11')}
+            {String(fw.version ? `FortiOS ${fw.version}` : (isLoading ? 'Loading...' : 'FortiOS'))}
           </div>
           <span className="text-[11px] text-slate-400">Enterprise Certified Build</span>
         </div>
@@ -63,19 +63,19 @@ export const FirewallPage: React.FC = () => {
         <div className="noc-card p-4 space-y-1 border-slate-800">
           <span className="text-xs text-slate-400 font-semibold uppercase">Hardware Serial</span>
           <div className="text-base font-bold text-slate-100 font-mono">
-            {String(fw.serial || 'FG6H0FTB25900725')}
+            {String(fw.serial || (isLoading ? 'Loading...' : '—'))}
           </div>
           <span className="text-[11px] text-slate-400">FortiGate-600F Enterprise</span>
         </div>
       </div>
 
       {/* Engine Utilization and Security Profiles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="noc-card p-5 space-y-4 border-slate-800">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="noc-card p-4 sm:p-5 space-y-4 border-slate-800">
+          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
             <Cpu className="w-4 h-4 text-purple-400" /> Live Firewall Engine Utilization
           </h3>
-          <div className="space-y-4 bg-slate-950 p-4 rounded-lg border border-slate-850 text-xs">
+          <div className="space-y-4 bg-slate-950 p-3 sm:p-4 rounded-lg border border-slate-850 text-xs">
             <div>
               <div className="flex justify-between mb-1">
                 <span className="text-slate-400">System Processing Unit (CPU)</span>
@@ -113,11 +113,11 @@ export const FirewallPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="noc-card p-5 space-y-4 border-slate-800">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+        <div className="noc-card p-4 sm:p-5 space-y-4 border-slate-800">
+          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
             <Lock className="w-4 h-4 text-emerald-400" /> Security Inspection Profiles
           </h3>
-          <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs">
             <div className="p-3 rounded bg-slate-950 border border-slate-850">
               <span className="text-slate-400 block mb-1 font-semibold">IPS Engine</span>
               <span className="text-emerald-400 font-bold">ACTIVE (Flow-based)</span>
@@ -140,12 +140,12 @@ export const FirewallPage: React.FC = () => {
 
       {/* Mapped FortiGate Firewall Policies */}
       {vlans && vlans.length > 0 && (
-        <div className="noc-card p-5 space-y-3 border-slate-800">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+        <div className="noc-card p-4 sm:p-5 space-y-3 border-slate-800">
+          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
             <Layers className="w-4 h-4 text-blue-400" /> Managed FortiOS Firewall IPv4 Policies ({vlans.length})
           </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
+          <div className="table-scroll-container">
+            <table className="w-full text-left text-xs text-slate-300 min-w-[700px]">
               <thead className="bg-slate-900 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-800">
                 <tr>
                   <th className="py-2.5 px-4">Policy ID</th>

@@ -33,8 +33,8 @@ export const ReportsPage: React.FC = () => {
     queryFn: api.getAvailabilityReport,
   });
 
-  const rep = (report as Record<string, unknown>) || {};
-  const problemDevices = (rep.top_problem_devices as Array<Record<string, unknown>>) || [];
+  const rep = report || ({} as Partial<typeof report>);
+  const problemDevices = rep?.top_problem_devices || [];
 
   // 2. Custom Network LLP (Link Load Performance) Report Data
   const { data: llpData, isLoading: isLLPLoading } = useQuery({
@@ -367,12 +367,12 @@ export const ReportsPage: React.FC = () => {
   }, [series, selectedProvider]);
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header & View Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-            <FileBarChart2 className="w-6 h-6 text-blue-400" /> Infrastructure SLA & Network LLP Reports
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+            <FileBarChart2 className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 shrink-0" /> Infrastructure SLA & Network LLP Reports
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Official Telecom Link Load Performance (LLP), Bandwidth SLA Adherence & Infrastructure MTTR Audit
@@ -380,10 +380,10 @@ export const ReportsPage: React.FC = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
           <button
             onClick={() => setActiveTab('LLP')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
               activeTab === 'LLP'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -393,7 +393,7 @@ export const ReportsPage: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('SLA')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
               activeTab === 'SLA'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -586,8 +586,8 @@ export const ReportsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="table-scroll-container max-h-[420px] overflow-y-auto">
+              <table className="w-full text-left text-xs text-slate-300 min-w-[750px]">
                 <thead className="bg-slate-900/90 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-800 sticky top-0 z-10">
                   <tr>
                     <th className="py-2.5 px-4">Timestamp (IST)</th>
@@ -673,8 +673,8 @@ export const ReportsPage: React.FC = () => {
       {/* TAB 2: INFRASTRUCTURE SLA & AVAILABILITY REPORT                */}
       {/* ============================================================== */}
       {activeTab === 'SLA' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="noc-card p-4 space-y-1">
               <span className="text-xs text-slate-400 font-semibold uppercase">Network Availability</span>
               <div className="text-2xl font-black text-emerald-400 font-mono">
@@ -708,12 +708,12 @@ export const ReportsPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="noc-card p-5 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+          <div className="noc-card p-4 sm:p-5 space-y-4">
+            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400" /> Top Problem Devices (Recurring Outages)
             </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="table-scroll-container">
+              <table className="w-full text-left text-xs text-slate-300 min-w-[650px]">
                 <thead className="bg-slate-900 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-800">
                   <tr>
                     <th className="py-2.5 px-4">Device Identifier</th>

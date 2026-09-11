@@ -1,4 +1,4 @@
-﻿package sound_test
+package sound_test
 
 import (
 	"fmt"
@@ -79,7 +79,7 @@ func TestSoundChannelsAndMuting(t *testing.T) {
 	}
 
 	// 4. ILL down
-	illAlert := engine.ProcessStateChange("ILL", "DOWN", "ILL-TATA-PRIMARY-1Gbps")
+	illAlert := engine.ProcessStateChange("ILL", "DOWN", "ILL-RAILTEL-PRIMARY-3Gbps")
 	if illAlert == nil {
 		t.Fatal("expected ILL alert to be non-nil")
 	}

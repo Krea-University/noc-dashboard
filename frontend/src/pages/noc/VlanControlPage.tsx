@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Layers, ShieldAlert, CheckCircle2, RotateCcw, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Layers, ShieldAlert, CheckCircle2, RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react';
 import { api } from '../../api/client';
 import { VlanConfirmModal } from '../../components/common/VlanConfirmModal';
 import { VLAN, ActionJob } from '../../types';
@@ -10,6 +10,8 @@ export const VlanControlPage: React.FC = () => {
   const [modalAction, setModalAction] = useState<'DISABLE' | 'ENABLE'>('DISABLE');
   const [modalOpen, setModalOpen] = useState(false);
   const [rollbackLoading, setRollbackLoading] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const { data: vlans, refetch: refetchVlans, isLoading: vlansLoading } = useQuery({
     queryKey: ['vlans'],
@@ -29,6 +31,28 @@ export const VlanControlPage: React.FC = () => {
     setModalOpen(true);
   };
 
+  const handleSyncFromFirewall = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      const res = await api.syncVlansFromFirewall();
+      refetchVlans();
+      setSyncFeedback({
+        type: 'success',
+        message: `Successfully synchronized ${res.synced_count} VLAN policies directly from FortiGate Firewall.`,
+      });
+      setTimeout(() => setSyncFeedback(null), 6000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed syncing VLANs from firewall';
+      setSyncFeedback({
+        type: 'error',
+        message: msg,
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleRollback = async (jobId: string) => {
     setRollbackLoading(jobId);
     try {
@@ -43,25 +67,70 @@ export const VlanControlPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto">
-      <div>
-        <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-          <Layers className="w-6 h-6 text-blue-400" /> FortiGate VLAN Internet Access Control
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">
-          12-Step Verified Firewall Modification Pipeline with Blast Radius Estimation, Mandatory Justification & Rollback
-        </p>
+    <div className="p-3 sm:p-4 md:p-6 space-y-6 sm:space-y-8 max-w-[1600px] mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+        <div>
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+            <Layers className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /> FortiGate VLAN Internet Access Control
+          </h1>
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
+            12-Step Verified Firewall Modification Pipeline with Blast Radius Estimation, Mandatory Password Re-Authentication & Rollback
+          </p>
+        </div>
+
+        <button
+          onClick={handleSyncFromFirewall}
+          disabled={isSyncing || vlansLoading}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 hover:text-blue-200 text-xs font-bold uppercase transition-colors self-start sm:self-auto disabled:opacity-50"
+          title="Fetch live VLAN policies and status directly from FortiGate Firewall"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-blue-400' : 'text-blue-400'}`} />
+          {isSyncing ? 'Syncing from Firewall...' : 'Sync from Firewall'}
+        </button>
       </div>
 
+      {/* Sync Feedback Notification */}
+      {syncFeedback && (
+        <div
+          className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-3 ${
+            syncFeedback.type === 'success'
+              ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+              : 'bg-red-950/40 border-red-500/30 text-red-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {syncFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            )}
+            <span>{syncFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setSyncFeedback(null)}
+            className="text-slate-400 hover:text-slate-200 text-xs font-bold"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* VLAN Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
         {vlans?.map((v) => {
           const isEnabled = v.internet_status === 'ENABLED';
           return (
-            <div key={v.vlan_id} className="noc-card p-5 space-y-4 relative overflow-hidden flex flex-col justify-between">
+            <div key={v.vlan_id} className="noc-card p-4 sm:p-5 space-y-4 relative overflow-hidden flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-xs font-bold text-slate-400">VLAN {v.vlan_id}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-400">VLAN {v.vlan_id}</span>
+                    {v.fortigate_policy_id ? (
+                      <span className="font-mono text-[10px] text-slate-400 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
+                        Policy #{v.fortigate_policy_id}
+                      </span>
+                    ) : null}
+                  </div>
                   <span
                     className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase border ${
                       isEnabled
@@ -120,20 +189,20 @@ export const VlanControlPage: React.FC = () => {
       </div>
 
       {/* Network Action Jobs Execution Log */}
-      <div className="noc-card p-5 space-y-4">
+      <div className="noc-card p-4 sm:p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-blue-400" /> Execution Pipeline Audit & Job History
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
               Verified state transitions, operator reasons, and reversible actions
             </p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div className="overflow-x-auto table-scroll-container">
+          <table className="w-full text-left text-xs text-slate-300 min-w-[700px]">
             <thead className="bg-slate-900 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-800">
               <tr>
                 <th className="py-3 px-3">Job ID</th>

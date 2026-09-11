@@ -87,24 +87,24 @@ export const GlobalSearchModal: React.FC<Props> = ({ isOpen, onClose, onSelectDe
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/75 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden text-slate-100 animate-in fade-in zoom-in-95 duration-100">
-        <div className="p-4 border-b border-slate-800 flex items-center gap-3">
-          <Search className="w-5 h-5 text-blue-400" />
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-16 bg-black/75 backdrop-blur-sm p-3 sm:p-4">
+      <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden text-slate-100 animate-in fade-in zoom-in-95 duration-100 max-h-[85vh] flex flex-col">
+        <div className="p-3.5 sm:p-4 border-b border-slate-800 flex items-center gap-2.5 sm:gap-3 shrink-0">
+          <Search className="w-5 h-5 text-blue-400 shrink-0" />
           <input
             ref={inputRef}
             type="text"
-            placeholder="Search devices, IPs (10.x), hostnames, biometrics, VLANs, alarms..."
+            placeholder="Search devices, IPs, hostnames, VLANs, alarms... (/)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent border-none outline-none text-sm text-slate-100 placeholder-slate-500"
+            className="flex-1 bg-transparent border-none outline-none text-xs sm:text-sm text-slate-100 placeholder-slate-500 min-w-0"
           />
-          <button onClick={onClose} className="p-1 rounded text-slate-400 hover:text-slate-200">
+          <button onClick={onClose} className="p-1 rounded text-slate-400 hover:text-slate-200 shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="max-h-96 overflow-y-auto p-4 space-y-4">
+        <div className="max-h-[65vh] sm:max-h-96 overflow-y-auto p-3 sm:p-4 space-y-4">
           {devices.length > 0 && (
             <div>
               <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">

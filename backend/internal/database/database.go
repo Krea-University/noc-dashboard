@@ -1,4 +1,4 @@
-﻿package database
+package database
 
 import (
 	"bytes"
@@ -126,6 +126,10 @@ func (db *DB) RunMigrations(migrationsDir string) error {
 		for _, stmt := range statements {
 			stmt = strings.TrimSpace(stmt)
 			if stmt == "" {
+				continue
+			}
+
+			if db.Driver == "sqlite" && strings.Contains(strings.ToUpper(stmt), "INET_ATON") {
 				continue
 			}
 

@@ -1,4 +1,4 @@
-﻿package opmanager
+package opmanager
 
 import (
 	"context"
@@ -48,8 +48,8 @@ func (m *MockProvider) initializeSeedData() {
 			Type: "Core Switch", Vendor: "Cisco", Model: "Catalyst 9500-48Y4C", Status: "UP",
 			AvailabilityPct: 99.98, ResponseTimeMS: 1, CPUPct: 24.5, MemPct: 42.1, DiskPct: 18.0, LastSeenAt: now,
 			Interfaces: []integrations.InterfaceDTO{
-				{Name: "HundredGigE1/0/1 (Tata ILL Uplink)", IndexNum: 1, SpeedBPS: 1000000000, Status: "UP", InTrafficBPS: 645000000, OutTrafficBPS: 312000000},
-				{Name: "HundredGigE1/0/2 (Airtel ILL Uplink)", IndexNum: 2, SpeedBPS: 1000000000, Status: "UP", InTrafficBPS: 480000000, OutTrafficBPS: 210000000},
+				{Name: "HundredGigE1/0/1 (Railtel ILL Uplink)", IndexNum: 1, SpeedBPS: 3000000000, Status: "UP", InTrafficBPS: 645000000, OutTrafficBPS: 312000000},
+				{Name: "HundredGigE1/0/2 (Airtel ILL Uplink)", IndexNum: 2, SpeedBPS: 1200000000, Status: "UP", InTrafficBPS: 480000000, OutTrafficBPS: 210000000},
 			},
 		},
 		integrations.DeviceDTO{
@@ -68,8 +68,8 @@ func (m *MockProvider) initializeSeedData() {
 			AvailabilityPct: 99.42, ResponseTimeMS: 3, CPUPct: 38.2, MemPct: 54.1, DiskPct: 24.0, LastSeenAt: now,
 		},
 		integrations.DeviceDTO{
-			SourceID: "opm_ill_01", Name: "ILL-TATA-PRIMARY-1Gbps", IPAddress: "115.112.45.1", CategoryCode: "ILL",
-			Type: "Internet Leased Line", Vendor: "Tata Teleservices", Model: "1 Gbps Leased Line", Status: "UP",
+			SourceID: "opm_ill_01", Name: "ILL-RAILTEL-PRIMARY-3Gbps", IPAddress: "115.112.45.1", CategoryCode: "ILL",
+			Type: "Internet Leased Line", Vendor: "Railtel Corporation", Model: "3 Gbps Leased Line", Status: "UP",
 			AvailabilityPct: 99.95, ResponseTimeMS: 8, CPUPct: 45.0, MemPct: 52.0, DiskPct: 10.0, LastSeenAt: now,
 		},
 		integrations.DeviceDTO{

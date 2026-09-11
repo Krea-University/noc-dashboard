@@ -25,29 +25,29 @@ export const ServersPage: React.FC = () => {
   );
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header & Quick Telemetry Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-            <Server className="w-6 h-6 text-emerald-400" /> Compute & Virtualization Servers
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+            <Server className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" /> Compute & Virtualization Servers
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
             Core Infrastructure Appliances, Virtual Hosts, Database Clusters & Endpoint Central Server Nodes
           </p>
         </div>
 
-        <div className="flex items-center gap-4 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 bg-slate-900 border border-slate-800 px-3 sm:px-4 py-2 rounded-xl text-xs font-mono self-start lg:self-auto">
           <div>
             <span className="text-slate-500 block text-[10px] uppercase">Cluster Availability</span>
             <span className="text-emerald-400 font-bold text-sm">100.0% Online</span>
           </div>
-          <div className="h-8 w-[1px] bg-slate-800" />
+          <div className="h-8 w-[1px] bg-slate-800 hidden sm:block" />
           <div>
             <span className="text-slate-500 block text-[10px] uppercase">Avg CPU Load</span>
             <span className="text-purple-400 font-bold text-sm">{avgCpu}%</span>
           </div>
-          <div className="h-8 w-[1px] bg-slate-800" />
+          <div className="h-8 w-[1px] bg-slate-800 hidden sm:block" />
           <div>
             <span className="text-slate-500 block text-[10px] uppercase">Avg Memory Load</span>
             <span className="text-blue-400 font-bold text-sm">{avgMem}%</span>
@@ -61,7 +61,7 @@ export const ServersPage: React.FC = () => {
           <Activity className="w-4 h-4 text-emerald-400" /> Core Production Appliances & Virtual Hosts ({servers.length})
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {servers.map((srv) => {
             const isUp = srv.status === 'UP';
             return (

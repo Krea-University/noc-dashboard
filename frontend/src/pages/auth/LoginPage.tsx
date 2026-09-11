@@ -56,7 +56,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#06090e] text-slate-100 flex flex-col justify-center items-center p-6 select-none relative overflow-hidden">
+    <div className="min-h-screen bg-[#06090e] text-slate-100 flex flex-col justify-center items-center p-3 sm:p-6 select-none relative overflow-hidden">
       {/* Dynamic Background Mesh Gradients */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[100px] pointer-events-none" />
@@ -65,15 +65,15 @@ export const LoginPage: React.FC = () => {
       {/* Grid Overlay Texture */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b0a_1px,transparent_1px),linear-gradient(to_bottom,#1e293b0a_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none" />
 
-      <div className="w-full max-w-md bg-[#0a0f18]/90 border border-slate-800/90 rounded-2xl shadow-2xl p-8 backdrop-blur-xl z-10 space-y-6 relative border-t-2 border-t-blue-500">
+      <div className="w-full max-w-md bg-[#0a0f18]/90 border border-slate-800/90 rounded-2xl shadow-2xl p-5 sm:p-8 backdrop-blur-xl z-10 space-y-5 sm:space-y-6 relative border-t-2 border-t-blue-500">
         {/* Brand Header with Official Krea Logo */}
         <div className="text-center space-y-3">
           <div className="flex justify-center mb-2">
-            <div className="p-3 rounded-2xl bg-white/5 border border-white/10 shadow-inner flex items-center justify-center">
+            <div className="p-2.5 sm:p-3 rounded-2xl bg-white/5 border border-white/10 shadow-inner flex items-center justify-center">
               <img
                 src="https://cdn.krea.edu.in/logo.png"
                 alt="Krea University"
-                className="h-12 w-auto object-contain max-w-[180px]"
+                className="h-10 sm:h-12 w-auto object-contain max-w-[150px] sm:max-w-[180px]"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/krea-logo.png';
                 }}
@@ -84,7 +84,7 @@ export const LoginPage: React.FC = () => {
             <span className="text-[10px] font-mono font-bold tracking-[0.2em] text-blue-400 uppercase">
               Mission-Critical Infrastructure
             </span>
-            <h1 className="text-2xl font-black tracking-tight text-slate-100 mt-0.5">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-100 mt-0.5">
               IT Operations Command Center
             </h1>
             <p className="text-xs text-slate-400 mt-1">

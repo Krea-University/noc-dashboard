@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -163,6 +164,7 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 
 		// VLAN & Firewall Control Pipeline
 		api.Get("/api/vlans", handleListVLANs(deps))
+		api.Post("/api/vlans/sync", handleSyncVLANsFromFirewall(deps))
 		api.Get("/api/vlans/{id}", handleGetVLAN(deps))
 		api.Get("/api/vlans/{id}/impact", handleGetVLANImpact(deps))
 		api.Post("/api/vlans/{id}/internet/disable", handleDisableVlanInternet(deps))
@@ -176,10 +178,18 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		// Sound Settings Mutation
 		api.Put("/api/sound/profiles/{category}", handleUpdateSoundProfile(deps))
 
-		// User Administration (Admin Only)
-		api.Get("/api/users", handleListUsers(deps))
-		api.Post("/api/users", handleCreateUser(deps))
-		api.Patch("/api/users/{id}", handlePatchUser(deps))
+		// Roles & RBAC Reference
+		api.Get("/api/roles", handleListRoles(deps))
+
+		// User Administration (Requires users.manage permission)
+		api.Group(func(usersRouter chi.Router) {
+			usersRouter.Use(rbac.RequirePermission("users.manage"))
+			usersRouter.Get("/api/users", handleListUsers(deps))
+			usersRouter.Post("/api/users", handleCreateUser(deps))
+			usersRouter.Patch("/api/users/{id}", handlePatchUser(deps))
+			usersRouter.Delete("/api/users/{id}", handleDeleteUser(deps))
+			usersRouter.Post("/api/users/{id}/reset-password", handleResetUserPassword(deps))
+		})
 
 		// System Settings (Admin Only)
 		api.Get("/api/settings", handleListSettings(deps))
@@ -327,18 +337,26 @@ func handleMe(deps *RouterDeps) http.HandlerFunc {
 func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		summary := models.DashboardSummaryDTO{
-			OverallAvailability: 99.85,
-			NetworkAvailability: 99.72,
+			OverallAvailability: 100.0,
+			NetworkAvailability: 100.0,
 			DataFreshness:       "LIVE",
 		}
 
 		// Query devices counts
-		_ = deps.DB.QueryRow("SELECT COUNT(*), SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), SUM(CASE WHEN status='WARNING' THEN 1 ELSE 0 END) FROM devices").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='WARNING' THEN 1 ELSE 0 END), 0) FROM devices").
 			Scan(&summary.TotalDevices, &summary.DevicesUp, &summary.DevicesDown, &summary.DevicesWarning)
 
 		// Query network devices
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code IN ('SWITCH','ROUTER','WIRELESS_AP','ILL')").
 			Scan(&summary.NetworkDevicesTotal, &summary.NetworkDevicesUp, &summary.NetworkDevicesDown)
+
+		// Calculate live availability dynamically
+		if summary.TotalDevices > 0 {
+			summary.OverallAvailability = math.Round((float64(summary.DevicesUp)/float64(summary.TotalDevices))*10000) / 100
+		}
+		if summary.NetworkDevicesTotal > 0 {
+			summary.NetworkAvailability = math.Round((float64(summary.NetworkDevicesUp)/float64(summary.NetworkDevicesTotal))*10000) / 100
+		}
 
 		// Query switches
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE (category_code = 'SWITCH' AND type NOT LIKE '%AP%' AND type NOT LIKE '%Access Point%' AND type NOT LIKE '%Aruba%' AND type NOT LIKE '%Ruckus%' AND type NOT LIKE '%Firewall%' AND name NOT LIKE '%_AP')").
@@ -353,15 +371,15 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 			Scan(&summary.ILLTotal, &summary.ILLUp)
 
 		// Query servers
-		_ = deps.DB.QueryRow("SELECT COUNT(*), SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END) FROM devices WHERE category_code = 'SERVER'").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'SERVER'").
 			Scan(&summary.ServersTotal, &summary.ServersUp, &summary.ServersDown)
 
 		// Query biometrics
-		_ = deps.DB.QueryRow("SELECT COUNT(*), SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END) FROM devices WHERE category_code = 'BIOMETRIC'").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'BIOMETRIC'").
 			Scan(&summary.BiometricsTotal, &summary.BiometricsUp, &summary.BiometricsDown)
 
 		// Query endpoints
-		_ = deps.DB.QueryRow("SELECT COUNT(*), SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END), SUM(CASE WHEN status='OFFLINE' THEN 1 ELSE 0 END) FROM endpoints").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='OFFLINE' THEN 1 ELSE 0 END), 0) FROM endpoints").
 			Scan(&summary.EndpointsTotal, &summary.EndpointsOnline, &summary.EndpointsOffline)
 
 		// Query alarms & incidents
@@ -1140,7 +1158,12 @@ func handleUpdateIncidentStatus(deps *RouterDeps) http.HandlerFunc {
 		}
 
 		now := time.Now().UTC()
-		_, err := deps.DB.Exec("UPDATE incidents SET status = ?, updated_at = ? WHERE id = ?", req.Status, now, id)
+		var err error
+		if req.Status == "RESOLVED" || req.Status == "CLOSED" {
+			_, err = deps.DB.Exec("UPDATE incidents SET status = ?, updated_at = ?, resolved_at = ?, resolved_by = ? WHERE id = ?", req.Status, now, now, user.Username, id)
+		} else {
+			_, err = deps.DB.Exec("UPDATE incidents SET status = ?, updated_at = ? WHERE id = ?", req.Status, now, id)
+		}
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed updating incident status")
 			return
@@ -1289,6 +1312,121 @@ func handleGetVLANImpact(deps *RouterDeps) http.HandlerFunc {
 	}
 }
 
+func handleSyncVLANsFromFirewall(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := rbac.GetUserFromContext(ctx)
+
+		fwVlans, err := deps.FGProvider.GetVlans(ctx)
+		if err != nil {
+			respondError(w, http.StatusBadGateway, fmt.Sprintf("failed fetching VLANs from FortiGate: %v", err))
+			return
+		}
+
+		now := time.Now().UTC()
+		syncedCount := 0
+
+		for _, fv := range fwVlans {
+			if fv.FortiGatePolicyID <= 0 {
+				continue
+			}
+
+			// Check if VLAN already exists by fortigate_policy_id or vlan_id
+			var existingID string
+			err := deps.DB.QueryRow("SELECT id FROM vlans WHERE fortigate_policy_id = ? OR vlan_id = ?", fv.FortiGatePolicyID, fv.VlanID).Scan(&existingID)
+			if err == nil && existingID != "" {
+				// Update live status and updated timestamp
+				_, _ = deps.DB.Exec(`
+					UPDATE vlans 
+					SET internet_status = ?, updated_at = ? 
+					WHERE id = ?`,
+					fv.InternetStatus, now, existingID)
+				syncedCount++
+			} else {
+				// Insert newly discovered policy as a VLAN record
+				newID := fmt.Sprintf("vlan_%d", fv.VlanID)
+				if fv.VlanID == 0 {
+					newID = fmt.Sprintf("vlan_pol_%d", fv.FortiGatePolicyID)
+					fv.VlanID = fv.FortiGatePolicyID
+				}
+				subnet := fv.Subnet
+				if subnet == "" {
+					subnet = fmt.Sprintf("10.10.%d.0/24", fv.VlanID)
+				}
+				gw := fv.Gateway
+				if gw == "" {
+					gw = fmt.Sprintf("10.10.%d.1", fv.VlanID)
+				}
+				_, err = deps.DB.Exec(`
+					INSERT INTO vlans (id, vlan_id, name, description, subnet, gateway, internet_status, fortigate_policy_id, expected_endpoints, expected_aps, expected_classrooms, last_state_change_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					newID, fv.VlanID, fv.Name, fv.Description, subnet, gw, fv.InternetStatus, fv.FortiGatePolicyID,
+					fv.ExpectedEndpoints, fv.ExpectedAPs, fv.ExpectedClassrooms, now, now)
+				if err == nil {
+					syncedCount++
+				}
+			}
+		}
+
+		// Query updated list of all VLANs
+		rows, err := deps.DB.Query(`
+			SELECT id, vlan_id, name, description, subnet, gateway, internet_status, fortigate_policy_id, expected_endpoints, expected_aps, expected_classrooms, last_state_change_at, last_action_job_id, updated_at
+			FROM vlans
+			ORDER BY vlan_id ASC`)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer rows.Close()
+
+		var updatedVlans []models.VLAN
+		for rows.Next() {
+			var v models.VLAN
+			var desc, jobID *string
+			_ = rows.Scan(&v.ID, &v.VlanID, &v.Name, &desc, &v.Subnet, &v.Gateway, &v.InternetStatus, &v.FortiGatePolicyID, &v.ExpectedEndpoints, &v.ExpectedAPs, &v.ExpectedClassrooms, &v.LastStateChangeAt, &jobID, &v.UpdatedAt)
+			if desc != nil {
+				v.Description = *desc
+			}
+			if jobID != nil {
+				v.LastActionJobID = *jobID
+			}
+			updatedVlans = append(updatedVlans, v)
+		}
+
+		// Log audit trail
+		username := "system"
+		userID := ""
+		if user != nil {
+			username = user.Username
+			userID = user.ID
+		}
+		_ = deps.AuditSvc.Log(ctx, &models.AuditLog{
+			UserID:     userID,
+			Username:   username,
+			Action:     "FIREWALL_VLANS_SYNCED",
+			TargetType: "FIREWALL",
+			TargetID:   "fortigate",
+			IPAddress:  r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			Result:     "SUCCESS",
+			Reason:     fmt.Sprintf("Synchronized %d VLAN policies from FortiGate firewall", syncedCount),
+			Timestamp:  now,
+		})
+
+		// Broadcast WebSocket update
+		deps.WSHub.Broadcast("VLAN_LIST_UPDATED", map[string]interface{}{
+			"synced_count": syncedCount,
+			"timestamp":    now,
+		})
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":       "success",
+			"synced_count": syncedCount,
+			"vlans":        updatedVlans,
+		})
+	}
+}
+
 func handleDisableVlanInternet(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idStr := chi.URLParam(r, "id")
@@ -1300,6 +1438,7 @@ func handleDisableVlanInternet(deps *RouterDeps) http.HandlerFunc {
 
 		var req struct {
 			Reason      string `json:"reason"`
+			Password    string `json:"password"`
 			ConfirmCode string `json:"confirm_code"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1308,6 +1447,35 @@ func handleDisableVlanInternet(deps *RouterDeps) http.HandlerFunc {
 		}
 
 		user := rbac.GetUserFromContext(r.Context())
+		if user == nil {
+			respondError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		// Mandatory Password Re-Authentication
+		if strings.TrimSpace(req.Password) == "" {
+			respondError(w, http.StatusBadRequest, "account password is required for firewall modification")
+			return
+		}
+
+		valid, authErr := deps.AuthSvc.VerifyUserPassword(user.ID, req.Password)
+		if authErr != nil || !valid {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				UserID:     user.ID,
+				Username:   user.Username,
+				Action:     "VLAN_INTERNET_DISABLE_AUTH_FAILED",
+				TargetType: "VLAN",
+				TargetID:   idStr,
+				IPAddress:  r.RemoteAddr,
+				UserAgent:  r.UserAgent(),
+				Result:     "FAILURE",
+				Reason:     "Password re-verification failed: incorrect password",
+				Timestamp:  time.Now().UTC(),
+			})
+			respondError(w, http.StatusUnauthorized, "invalid password: authorization rejected")
+			return
+		}
+
 		job, err := deps.VlanPipeline.ExecuteVlanInternetAction(r.Context(), vlanID, "DISABLE", req.Reason, user, r.RemoteAddr, r.UserAgent())
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
@@ -1327,7 +1495,8 @@ func handleEnableVlanInternet(deps *RouterDeps) http.HandlerFunc {
 		}
 
 		var req struct {
-			Reason string `json:"reason"`
+			Reason   string `json:"reason"`
+			Password string `json:"password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid request body")
@@ -1335,6 +1504,35 @@ func handleEnableVlanInternet(deps *RouterDeps) http.HandlerFunc {
 		}
 
 		user := rbac.GetUserFromContext(r.Context())
+		if user == nil {
+			respondError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		// Mandatory Password Re-Authentication
+		if strings.TrimSpace(req.Password) == "" {
+			respondError(w, http.StatusBadRequest, "account password is required for firewall modification")
+			return
+		}
+
+		valid, authErr := deps.AuthSvc.VerifyUserPassword(user.ID, req.Password)
+		if authErr != nil || !valid {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				UserID:     user.ID,
+				Username:   user.Username,
+				Action:     "VLAN_INTERNET_ENABLE_AUTH_FAILED",
+				TargetType: "VLAN",
+				TargetID:   idStr,
+				IPAddress:  r.RemoteAddr,
+				UserAgent:  r.UserAgent(),
+				Result:     "FAILURE",
+				Reason:     "Password re-verification failed: incorrect password",
+				Timestamp:  time.Now().UTC(),
+			})
+			respondError(w, http.StatusUnauthorized, "invalid password: authorization rejected")
+			return
+		}
+
 		job, err := deps.VlanPipeline.ExecuteVlanInternetAction(r.Context(), vlanID, "ENABLE", req.Reason, user, r.RemoteAddr, r.UserAgent())
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
@@ -1348,6 +1546,35 @@ func handleRollbackAction(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		user := rbac.GetUserFromContext(r.Context())
+		if user == nil {
+			respondError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+
+		var req struct {
+			Password string `json:"password"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if strings.TrimSpace(req.Password) != "" {
+			valid, authErr := deps.AuthSvc.VerifyUserPassword(user.ID, req.Password)
+			if authErr != nil || !valid {
+				_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+					UserID:     user.ID,
+					Username:   user.Username,
+					Action:     "VLAN_ROLLBACK_AUTH_FAILED",
+					TargetType: "ACTION_JOB",
+					TargetID:   id,
+					IPAddress:  r.RemoteAddr,
+					UserAgent:  r.UserAgent(),
+					Result:     "FAILURE",
+					Reason:     "Password re-verification failed for rollback",
+					Timestamp:  time.Now().UTC(),
+				})
+				respondError(w, http.StatusUnauthorized, "invalid password: authorization rejected")
+				return
+			}
+		}
+
 		job, err := deps.VlanPipeline.Rollback(r.Context(), id, user, r.RemoteAddr, r.UserAgent())
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
@@ -1414,13 +1641,57 @@ func handleListAuditLogs(deps *RouterDeps) http.HandlerFunc {
 
 func handleReportAvailability(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Calculate daily availability statistics dynamically from database
-		var netTotal, netUp, srvTotal, srvUp, bioTotal, bioUp int
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code IN ('SWITCH', 'ROUTER', 'ILL', 'WIRELESS_AP')").Scan(&netTotal, &netUp)
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'SERVER'").Scan(&srvTotal, &srvUp)
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'BIOMETRIC'").Scan(&bioTotal, &bioUp)
+		// 1. Calculate category-level availability statistics dynamically from database
+		var netTotal, netUp, netDown, srvTotal, srvUp, srvDown, bioTotal, bioUp, bioDown int
+		_ = deps.DB.QueryRow(`
+			SELECT 
+				COUNT(*), 
+				COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0)
+			FROM devices 
+			WHERE category_code IN ('SWITCH', 'ROUTER', 'ILL', 'WIRELESS_AP')
+		`).Scan(&netTotal, &netUp, &netDown)
 
-		netAvail := 99.85
+		_ = deps.DB.QueryRow(`
+			SELECT 
+				COUNT(*), 
+				COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0)
+			FROM devices 
+			WHERE category_code = 'SERVER'
+		`).Scan(&srvTotal, &srvUp, &srvDown)
+
+		_ = deps.DB.QueryRow(`
+			SELECT 
+				COUNT(*), 
+				COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0)
+			FROM devices 
+			WHERE category_code = 'BIOMETRIC'
+		`).Scan(&bioTotal, &bioUp, &bioDown)
+
+		// Endpoints (Managed Workstations)
+		var epTotal, epOnline, epOffline int
+		_ = deps.DB.QueryRow(`
+			SELECT 
+				COUNT(*), 
+				COALESCE(SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status='OFFLINE' THEN 1 ELSE 0 END), 0)
+			FROM endpoints
+		`).Scan(&epTotal, &epOnline, &epOffline)
+
+		// All Infrastructure Devices
+		var devTotal, devUp, devDown, devWarning int
+		_ = deps.DB.QueryRow(`
+			SELECT 
+				COUNT(*), 
+				COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status='WARNING' THEN 1 ELSE 0 END), 0)
+			FROM devices
+		`).Scan(&devTotal, &devUp, &devDown, &devWarning)
+
+		netAvail := 100.0
 		if netTotal > 0 {
 			netAvail = math.Round((float64(netUp)/float64(netTotal))*10000) / 100
 		}
@@ -1428,29 +1699,215 @@ func handleReportAvailability(deps *RouterDeps) http.HandlerFunc {
 		if srvTotal > 0 {
 			srvAvail = math.Round((float64(srvUp)/float64(srvTotal))*10000) / 100
 		}
-		bioAvail := 98.5
+		bioAvail := 100.0
 		if bioTotal > 0 {
 			bioAvail = math.Round((float64(bioUp)/float64(bioTotal))*10000) / 100
 		}
-
-		var totalIncidents int
-		_ = deps.DB.QueryRow("SELECT COUNT(*) FROM incidents").Scan(&totalIncidents)
-		if totalIncidents == 0 {
-			totalIncidents = 3
+		epAvail := 100.0
+		if epTotal > 0 {
+			epAvail = math.Round((float64(epOnline)/float64(epTotal))*10000) / 100
 		}
 
-		// Query real devices currently DOWN or top problem devices
+		overallAvail := 100.0
+		if devTotal > 0 {
+			overallAvail = math.Round((float64(devUp)/float64(devTotal))*10000) / 100
+		}
+
+		// Contractual SLA Adherence: Weighted core infrastructure (servers 40%, network 40%, biometrics 20%)
+		contractualSla := math.Round(((srvAvail*0.40) + (netAvail*0.40) + (bioAvail*0.20))*100) / 100
+
+		// 2. MTTR calculation: Mean Time To Resolution
+		var avgMttr float64
+		_ = deps.DB.QueryRow(`
+			SELECT COALESCE(AVG(TIMESTAMPDIFF(MINUTE, created_at, resolved_at)), 0)
+			FROM incidents 
+			WHERE status IN ('RESOLVED', 'CLOSED') AND resolved_at IS NOT NULL
+		`).Scan(&avgMttr)
+
+		if avgMttr == 0 {
+			// If no resolved incidents yet, calculate average active incident open duration
+			_ = deps.DB.QueryRow(`
+				SELECT COALESCE(AVG(TIMESTAMPDIFF(MINUTE, created_at, CURRENT_TIMESTAMP)), 0)
+				FROM incidents 
+				WHERE status IN ('OPEN', 'INVESTIGATING', 'ACKNOWLEDGED')
+			`).Scan(&avgMttr)
+		}
+		mttrMinutes := math.Round(avgMttr*10) / 10
+
+		// 3. Incident stats (last 30 days)
+		var totalIncidents30d, activeIncidents, resolvedIncidents int
+		_ = deps.DB.QueryRow(`
+			SELECT 
+				COUNT(*),
+				COALESCE(SUM(CASE WHEN status IN ('OPEN', 'INVESTIGATING', 'ACKNOWLEDGED') THEN 1 ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN status IN ('RESOLVED', 'CLOSED') THEN 1 ELSE 0 END), 0)
+			FROM incidents
+			WHERE created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 30 DAY)
+		`).Scan(&totalIncidents30d, &activeIncidents, &resolvedIncidents)
+
+		// 4. Top problem devices
 		problemDevices := fetchTopProblemDevices(deps.DB, 10)
 
-		overallSla := math.Round(((netAvail+srvAvail+bioAvail)/3.0)*100) / 100
+		// 5. 30-Day Daily Availability Trends from historical alarm telemetry
+		type dayStat struct {
+			CritAlarms  int
+			MajorAlarms int
+			TotalAlarms int
+		}
+		alarmDays := make(map[string]dayStat)
+		alarmRows, err := deps.DB.Query(`
+			SELECT 
+				DATE_FORMAT(first_seen_at, '%Y-%m-%d') as log_date,
+				COUNT(*) as total_cnt,
+				COALESCE(SUM(CASE WHEN severity='CRITICAL' THEN 1 ELSE 0 END), 0) as crit_cnt,
+				COALESCE(SUM(CASE WHEN severity='MAJOR' THEN 1 ELSE 0 END), 0) as major_cnt
+			FROM alarms
+			WHERE first_seen_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)
+			GROUP BY log_date
+			ORDER BY log_date ASC
+		`)
+		if err == nil {
+			defer alarmRows.Close()
+			for alarmRows.Next() {
+				var logDate string
+				var st dayStat
+				if err := alarmRows.Scan(&logDate, &st.TotalAlarms, &st.CritAlarms, &st.MajorAlarms); err == nil {
+					alarmDays[logDate] = st
+				}
+			}
+		}
+
+		type TrendPoint struct {
+			Date            string  `json:"date"`
+			FullDate        string  `json:"full_date"`
+			AvailabilityPct float64 `json:"availability_pct"`
+			AlarmsCount     int     `json:"alarms_count"`
+			CriticalCount   int     `json:"critical_count"`
+		}
+
+		now := time.Now().UTC()
+		uptimeTrends := make([]TrendPoint, 0, 30)
+		for i := 29; i >= 0; i-- {
+			day := now.AddDate(0, 0, -i)
+			dateKey := day.Format("2006-01-02")
+			label := day.Format("Jan 02")
+
+			st := alarmDays[dateKey]
+			// Compute daily availability: baseline 99.98%, reduced by critical/major alarms
+			dayAvail := 99.98
+			if i == 0 {
+				// Current day reflects live overall device availability
+				dayAvail = overallAvail
+			} else if st.CritAlarms > 0 || st.MajorAlarms > 0 {
+				impact := (float64(st.CritAlarms) * 0.25) + (float64(st.MajorAlarms) * 0.05)
+				dayAvail = 100.0 - impact
+				if dayAvail < 98.20 {
+					dayAvail = 98.20
+				}
+				dayAvail = math.Round(dayAvail*100) / 100
+			}
+
+			uptimeTrends = append(uptimeTrends, TrendPoint{
+				Date:            label,
+				FullDate:        dateKey,
+				AvailabilityPct: dayAvail,
+				AlarmsCount:     st.TotalAlarms,
+				CriticalCount:   st.CritAlarms,
+			})
+		}
+
+		// 6. Campus Zone / Site Health Breakdown
+		type ZoneHealth struct {
+			Zone            string  `json:"zone"`
+			Total           int     `json:"total"`
+			Up              int     `json:"up"`
+			Down            int     `json:"down"`
+			Warning         int     `json:"warning"`
+			AvailabilityPct float64 `json:"availability_pct"`
+			Status          string  `json:"status"` // HEALTHY, DEGRADED, CRITICAL
+		}
+
+		zoneList := make([]ZoneHealth, 0)
+		zoneRows, zErr := deps.DB.Query(`
+			SELECT 
+				CASE 
+					WHEN name LIKE 'MB_%' OR name LIKE 'LAB_%' THEN 'Academic & Labs'
+					WHEN name LIKE 'RH%' THEN 'Student Residence Halls'
+					WHEN name LIKE 'FR_%' OR name LIKE 'NFR_%' THEN 'Faculty Residences'
+					WHEN category_code = 'SERVER' OR name LIKE 'SRV-%' THEN 'Core Data Center'
+					WHEN category_code = 'BIOMETRIC' THEN 'Access Control & Security'
+					WHEN category_code = 'ILL' THEN 'Internet Backbones (ILL)'
+					ELSE 'General Campus Infrastructure'
+				END as zone,
+				COUNT(*) as total,
+				COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) as up_count,
+				COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) as down_count,
+				COALESCE(SUM(CASE WHEN status='WARNING' THEN 1 ELSE 0 END), 0) as warn_count
+			FROM devices
+			GROUP BY zone
+			ORDER BY down_count DESC, total DESC
+		`)
+		if zErr == nil {
+			defer zoneRows.Close()
+			for zoneRows.Next() {
+				var zh ZoneHealth
+				if err := zoneRows.Scan(&zh.Zone, &zh.Total, &zh.Up, &zh.Down, &zh.Warning); err == nil {
+					if zh.Total > 0 {
+						zh.AvailabilityPct = math.Round((float64(zh.Up)/float64(zh.Total))*10000) / 100
+					} else {
+						zh.AvailabilityPct = 100.0
+					}
+					if zh.Down == 0 && zh.Warning == 0 {
+						zh.Status = "HEALTHY"
+					} else if zh.Down <= 2 {
+						zh.Status = "DEGRADED"
+					} else {
+						zh.Status = "CRITICAL"
+					}
+					zoneList = append(zoneList, zh)
+				}
+			}
+		}
+
+		mttrFormatted := fmt.Sprintf("%.0f min", mttrMinutes)
+		if mttrMinutes >= 60 {
+			hours := int(mttrMinutes) / 60
+			mins := int(mttrMinutes) % 60
+			mttrFormatted = fmt.Sprintf("%dh %02dm", hours, mins)
+		}
 
 		report := map[string]interface{}{
+			"overall_availability_pct":    overallAvail,
+			"sla_compliance_pct":          contractualSla,
+			"sla_target_pct":              99.50,
 			"network_availability_pct":    netAvail,
+			"network_devices_total":       netTotal,
+			"network_devices_up":          netUp,
+			"network_devices_down":        netDown,
 			"servers_availability_pct":    srvAvail,
+			"servers_total":               srvTotal,
+			"servers_up":                  srvUp,
+			"servers_down":                srvDown,
+			"endpoints_availability_pct":  epAvail,
+			"endpoints_total":             epTotal,
+			"endpoints_online":            epOnline,
+			"endpoints_offline":           epOffline,
 			"biometrics_availability_pct": bioAvail,
-			"mttr_minutes":                14.5,
-			"total_incidents_30d":         totalIncidents,
-			"sla_compliance_pct":          overallSla,
+			"biometrics_total":            bioTotal,
+			"biometrics_up":               bioUp,
+			"biometrics_down":             bioDown,
+			"total_devices":               devTotal,
+			"devices_up":                  devUp,
+			"devices_down":                devDown,
+			"devices_warning":             devWarning,
+			"mttr_minutes":                mttrMinutes,
+			"mttr_formatted":              mttrFormatted,
+			"mttr_target_minutes":         30.0,
+			"total_incidents_30d":         totalIncidents30d,
+			"active_incidents_count":      activeIncidents,
+			"resolved_incidents_count":    resolvedIncidents,
+			"uptime_trends_30d":           uptimeTrends,
+			"site_health_breakdown":       zoneList,
 			"top_problem_devices":         problemDevices,
 		}
 		respondJSON(w, http.StatusOK, report)
@@ -1939,13 +2396,42 @@ func handleUpdateSoundProfile(deps *RouterDeps) http.HandlerFunc {
 	}
 }
 
+func handleListRoles(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rows, err := deps.DB.Query(`
+			SELECT id, name, description, created_at
+			FROM roles
+			ORDER BY name ASC`)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed querying roles: "+err.Error())
+			return
+		}
+		defer rows.Close()
+
+		var roles []models.Role
+		for rows.Next() {
+			var role models.Role
+			if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt); err == nil {
+				perms, err := deps.AuthSvc.GetUserPermissions(role.ID)
+				if err == nil {
+					for _, p := range perms {
+						role.Permissions = append(role.Permissions, models.Permission{Code: p})
+					}
+				}
+				roles = append(roles, role)
+			}
+		}
+		respondJSON(w, http.StatusOK, roles)
+	}
+}
+
 func handleListUsers(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rows, err := deps.DB.Query(`
 			SELECT u.id, u.username, u.email, u.role_id, r.name, u.status, u.must_change_password, u.last_login_at, u.created_at, u.updated_at
 			FROM users u
 			JOIN roles r ON u.role_id = r.id
-			ORDER BY u.username ASC`)
+			ORDER BY u.created_at DESC, u.username ASC`)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -1956,6 +2442,8 @@ func handleListUsers(deps *RouterDeps) http.HandlerFunc {
 		for rows.Next() {
 			var u models.User
 			_ = rows.Scan(&u.ID, &u.Username, &u.Email, &u.RoleID, &u.RoleName, &u.Status, &u.MustChangePassword, &u.LastLoginAt, &u.CreatedAt, &u.UpdatedAt)
+			perms, _ := deps.AuthSvc.GetUserPermissions(u.RoleID)
+			u.Permissions = perms
 			users = append(users, u)
 		}
 		respondJSON(w, http.StatusOK, users)
@@ -1965,13 +2453,53 @@ func handleListUsers(deps *RouterDeps) http.HandlerFunc {
 func handleCreateUser(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Username string `json:"username"`
-			Email    string `json:"email"`
-			Password string `json:"password"`
-			RoleID   string `json:"role_id"`
+			Username           string `json:"username"`
+			Email              string `json:"email"`
+			Password           string `json:"password"`
+			RoleID             string `json:"role_id"`
+			Status             string `json:"status"`
+			MustChangePassword *bool  `json:"must_change_password"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" || req.Password == "" {
-			respondError(w, http.StatusBadRequest, "username and password are required")
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		req.Username = strings.TrimSpace(req.Username)
+		req.Email = strings.TrimSpace(req.Email)
+		if len(req.Username) < 3 {
+			respondError(w, http.StatusBadRequest, "username must be at least 3 characters long")
+			return
+		}
+		if req.Email == "" || !strings.Contains(req.Email, "@") {
+			respondError(w, http.StatusBadRequest, "valid email address is required")
+			return
+		}
+		if len(req.Password) < 8 {
+			respondError(w, http.StatusBadRequest, "password must be at least 8 characters long")
+			return
+		}
+
+		if req.RoleID == "" {
+			req.RoleID = "role_operator"
+		}
+
+		// Verify role existence
+		var roleCount int
+		if err := deps.DB.QueryRow("SELECT COUNT(*) FROM roles WHERE id = ?", req.RoleID).Scan(&roleCount); err != nil || roleCount == 0 {
+			respondError(w, http.StatusBadRequest, "invalid role specified")
+			return
+		}
+
+		// Check for duplicate username or email
+		var existingCount int
+		err := deps.DB.QueryRow("SELECT COUNT(*) FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)", req.Username, req.Email).Scan(&existingCount)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "database error checking uniqueness")
+			return
+		}
+		if existingCount > 0 {
+			respondError(w, http.StatusConflict, "username or email already in use")
 			return
 		}
 
@@ -1981,8 +2509,14 @@ func handleCreateUser(deps *RouterDeps) http.HandlerFunc {
 			return
 		}
 
-		if req.RoleID == "" {
-			req.RoleID = "role_operator"
+		status := "ACTIVE"
+		if req.Status == "DISABLED" {
+			status = "DISABLED"
+		}
+
+		mustChange := 1
+		if req.MustChangePassword != nil && !*req.MustChangePassword {
+			mustChange = 0
 		}
 
 		now := time.Now().UTC()
@@ -1990,56 +2524,313 @@ func handleCreateUser(deps *RouterDeps) http.HandlerFunc {
 
 		insertSQL := `
 		INSERT INTO users (id, username, email, password_hash, role_id, status, must_change_password, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 'ACTIVE', 1, ?, ?)`
-		_, err = deps.DB.Exec(insertSQL, userID, req.Username, req.Email, hash, req.RoleID, now, now)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		_, err = deps.DB.Exec(insertSQL, userID, req.Username, req.Email, hash, req.RoleID, status, mustChange, now, now)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, "failed creating user: "+err.Error())
 			return
 		}
 
 		currentUser := rbac.GetUserFromContext(r.Context())
+		actorID := ""
+		actorName := "system"
+		if currentUser != nil {
+			actorID = currentUser.ID
+			actorName = currentUser.Username
+		}
+
 		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
-			UserID:    currentUser.ID,
-			Username:  currentUser.Username,
+			UserID:    actorID,
+			Username:  actorName,
 			Action:    "USER_CREATED",
 			TargetID:  userID,
-			Reason:    fmt.Sprintf("Created user %s with role %s", req.Username, req.RoleID),
+			Reason:    fmt.Sprintf("Created user %s (%s) with role %s", req.Username, req.Email, req.RoleID),
 			Result:    "SUCCESS",
 			IPAddress: r.RemoteAddr,
 			UserAgent: r.UserAgent(),
 		})
 
-		respondJSON(w, http.StatusCreated, map[string]string{"id": userID, "username": req.Username})
+		respondJSON(w, http.StatusCreated, map[string]interface{}{
+			"id":       userID,
+			"username": req.Username,
+			"email":    req.Email,
+			"role_id":  req.RoleID,
+			"status":   status,
+		})
 	}
 }
 
 func handlePatchUser(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
+		currentUser := rbac.GetUserFromContext(r.Context())
+		actorID := ""
+		actorName := "system"
+		if currentUser != nil {
+			actorID = currentUser.ID
+			actorName = currentUser.Username
+		}
+
 		var req struct {
-			Status   *string `json:"status"` // ACTIVE, DISABLED
-			RoleID   *string `json:"role_id"`
-			Password *string `json:"password"`
+			Email              *string `json:"email"`
+			Status             *string `json:"status"` // ACTIVE, DISABLED
+			RoleID             *string `json:"role_id"`
+			Password           *string `json:"password"`
+			MustChangePassword *bool   `json:"must_change_password"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
+		// Verify target user exists
+		var targetUsername, currentRoleID, currentStatus string
+		err := deps.DB.QueryRow("SELECT username, role_id, status FROM users WHERE id = ?", id).Scan(&targetUsername, &currentRoleID, &currentStatus)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+
+		// Guard: Cannot disable yourself
+		if req.Status != nil && *req.Status == "DISABLED" && currentUser != nil && currentUser.ID == id {
+			respondError(w, http.StatusBadRequest, "you cannot disable your own account")
+			return
+		}
+
+		// Guard: Cannot disable or demote the last remaining active ADMINISTRATOR
+		if (req.Status != nil && *req.Status == "DISABLED") || (req.RoleID != nil && *req.RoleID != "role_admin" && currentRoleID == "role_admin") {
+			var adminCount int
+			_ = deps.DB.QueryRow("SELECT COUNT(*) FROM users WHERE role_id = 'role_admin' AND status = 'ACTIVE'").Scan(&adminCount)
+			if currentRoleID == "role_admin" && currentStatus == "ACTIVE" && adminCount <= 1 {
+				respondError(w, http.StatusBadRequest, "cannot modify the last remaining active administrator account")
+				return
+			}
+		}
+
 		now := time.Now().UTC()
-		if req.Status != nil {
-			_, _ = deps.DB.Exec("UPDATE users SET status = ?, updated_at = ? WHERE id = ?", *req.Status, now, id)
+		var auditChanges []string
+
+		if req.Email != nil {
+			newEmail := strings.TrimSpace(*req.Email)
+			if newEmail == "" || !strings.Contains(newEmail, "@") {
+				respondError(w, http.StatusBadRequest, "valid email address is required")
+				return
+			}
+			var existingEmailCount int
+			_ = deps.DB.QueryRow("SELECT COUNT(*) FROM users WHERE LOWER(email) = LOWER(?) AND id != ?", newEmail, id).Scan(&existingEmailCount)
+			if existingEmailCount > 0 {
+				respondError(w, http.StatusConflict, "email address already in use by another user")
+				return
+			}
+			_, _ = deps.DB.Exec("UPDATE users SET email = ?, updated_at = ? WHERE id = ?", newEmail, now, id)
+			auditChanges = append(auditChanges, fmt.Sprintf("email=%s", newEmail))
 		}
+
 		if req.RoleID != nil {
+			var roleExists int
+			if err := deps.DB.QueryRow("SELECT COUNT(*) FROM roles WHERE id = ?", *req.RoleID).Scan(&roleExists); err != nil || roleExists == 0 {
+				respondError(w, http.StatusBadRequest, "invalid role specified")
+				return
+			}
 			_, _ = deps.DB.Exec("UPDATE users SET role_id = ?, updated_at = ? WHERE id = ?", *req.RoleID, now, id)
+			auditChanges = append(auditChanges, fmt.Sprintf("role_id=%s", *req.RoleID))
 		}
+
+		if req.Status != nil {
+			statusVal := "ACTIVE"
+			if *req.Status == "DISABLED" {
+				statusVal = "DISABLED"
+			}
+			_, _ = deps.DB.Exec("UPDATE users SET status = ?, updated_at = ? WHERE id = ?", statusVal, now, id)
+			auditChanges = append(auditChanges, fmt.Sprintf("status=%s", statusVal))
+
+			// Invalidate all active sessions if user is disabled
+			if statusVal == "DISABLED" {
+				_, _ = deps.DB.Exec("DELETE FROM sessions WHERE user_id = ?", id)
+			}
+		}
+
+		if req.MustChangePassword != nil {
+			flagVal := 0
+			if *req.MustChangePassword {
+				flagVal = 1
+			}
+			_, _ = deps.DB.Exec("UPDATE users SET must_change_password = ?, updated_at = ? WHERE id = ?", flagVal, now, id)
+			auditChanges = append(auditChanges, fmt.Sprintf("must_change_password=%d", flagVal))
+		}
+
 		if req.Password != nil && *req.Password != "" {
-			hash, _ := auth.HashPassword(*req.Password)
-			_, _ = deps.DB.Exec("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = ? WHERE id = ?", hash, now, id)
+			if len(*req.Password) < 8 {
+				respondError(w, http.StatusBadRequest, "password must be at least 8 characters long")
+				return
+			}
+			hash, err := auth.HashPassword(*req.Password)
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, "failed hashing password")
+				return
+			}
+			_, _ = deps.DB.Exec("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", hash, now, id)
+			// Invalidate existing sessions
+			_, _ = deps.DB.Exec("DELETE FROM sessions WHERE user_id = ?", id)
+			auditChanges = append(auditChanges, "password_reset")
 		}
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:    actorID,
+			Username:  actorName,
+			Action:    "USER_UPDATED",
+			TargetID:  id,
+			Reason:    fmt.Sprintf("Updated user %s: %s", targetUsername, strings.Join(auditChanges, ", ")),
+			Result:    "SUCCESS",
+			IPAddress: r.RemoteAddr,
+			UserAgent: r.UserAgent(),
+		})
 
 		respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 	}
+}
+
+func handleDeleteUser(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		currentUser := rbac.GetUserFromContext(r.Context())
+		actorID := ""
+		actorName := "system"
+		if currentUser != nil {
+			actorID = currentUser.ID
+			actorName = currentUser.Username
+		}
+
+		// Verify target user exists
+		var targetUsername, targetRoleID, targetStatus string
+		err := deps.DB.QueryRow("SELECT username, role_id, status FROM users WHERE id = ?", id).Scan(&targetUsername, &targetRoleID, &targetStatus)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+
+		// Disallow self-deletion
+		if currentUser != nil && currentUser.ID == id {
+			respondError(w, http.StatusBadRequest, "you cannot delete your own account")
+			return
+		}
+
+		// Disallow deleting the last active administrator
+		if targetRoleID == "role_admin" && targetStatus == "ACTIVE" {
+			var adminCount int
+			_ = deps.DB.QueryRow("SELECT COUNT(*) FROM users WHERE role_id = 'role_admin' AND status = 'ACTIVE'").Scan(&adminCount)
+			if adminCount <= 1 {
+				respondError(w, http.StatusBadRequest, "cannot delete the last remaining active administrator account")
+				return
+			}
+		}
+
+		// Invalidate all active sessions for this user
+		_, _ = deps.DB.Exec("DELETE FROM sessions WHERE user_id = ?", id)
+
+		// Delete user record
+		_, err = deps.DB.Exec("DELETE FROM users WHERE id = ?", id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed deleting user: "+err.Error())
+			return
+		}
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:    actorID,
+			Username:  actorName,
+			Action:    "USER_DELETED",
+			TargetID:  id,
+			Reason:    fmt.Sprintf("Deleted user account %s (id: %s)", targetUsername, id),
+			Result:    "SUCCESS",
+			IPAddress: r.RemoteAddr,
+			UserAgent: r.UserAgent(),
+		})
+
+		respondJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})
+	}
+}
+
+func handleResetUserPassword(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		currentUser := rbac.GetUserFromContext(r.Context())
+		actorID := ""
+		actorName := "system"
+		if currentUser != nil {
+			actorID = currentUser.ID
+			actorName = currentUser.Username
+		}
+
+		var req struct {
+			NewPassword        string `json:"new_password"`
+			MustChangePassword *bool  `json:"must_change_password"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		// Verify target user exists
+		var targetUsername string
+		err := deps.DB.QueryRow("SELECT username FROM users WHERE id = ?", id).Scan(&targetUsername)
+		if err != nil {
+			respondError(w, http.StatusNotFound, "user not found")
+			return
+		}
+
+		newPwd := strings.TrimSpace(req.NewPassword)
+		if newPwd == "" {
+			newPwd = generateSecureTempPassword()
+		} else if len(newPwd) < 8 {
+			respondError(w, http.StatusBadRequest, "password must be at least 8 characters long")
+			return
+		}
+
+		hash, err := auth.HashPassword(newPwd)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed hashing password")
+			return
+		}
+
+		mustChange := 1
+		if req.MustChangePassword != nil && !*req.MustChangePassword {
+			mustChange = 0
+		}
+
+		now := time.Now().UTC()
+		_, err = deps.DB.Exec("UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE id = ?", hash, mustChange, now, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed updating password: "+err.Error())
+			return
+		}
+
+		// Invalidate active sessions so user must authenticate with new credentials
+		_, _ = deps.DB.Exec("DELETE FROM sessions WHERE user_id = ?", id)
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:    actorID,
+			Username:  actorName,
+			Action:    "USER_PASSWORD_RESET",
+			TargetID:  id,
+			Reason:    fmt.Sprintf("Reset password for user %s", targetUsername),
+			Result:    "SUCCESS",
+			IPAddress: r.RemoteAddr,
+			UserAgent: r.UserAgent(),
+		})
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":             "password_reset",
+			"temporary_password": newPwd,
+			"must_change":        mustChange == 1,
+		})
+	}
+}
+
+func generateSecureTempPassword() string {
+	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*"
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	return string(b)
 }
 
 func handleListSettings(deps *RouterDeps) http.HandlerFunc {

@@ -53,16 +53,16 @@ export const SoundUnlockModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xl noc-card border border-slate-700 bg-slate-900 rounded-lg shadow-2xl p-6 text-slate-100">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-              <Volume2 className="w-6 h-6" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4">
+      <div className="w-full max-w-xl noc-card border border-slate-700 bg-slate-900 rounded-xl shadow-2xl p-4 sm:p-6 text-slate-100 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="p-2 sm:p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+              <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-100">Alert Sounds & Audio Configuration</h2>
-              <p className="text-xs text-slate-400">Four-channel sound alert engine & flood protection</p>
+              <h2 className="text-base sm:text-lg font-bold text-slate-100">Alert Sounds & Audio Configuration</h2>
+              <p className="text-[11px] sm:text-xs text-slate-400">Four-channel sound alert engine & flood protection</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800">
@@ -71,16 +71,16 @@ export const SoundUnlockModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         {/* AudioContext Status Banner */}
-        <div className="mt-4 p-4 rounded-lg bg-slate-950 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className="mt-4 p-3 sm:p-4 rounded-lg bg-slate-950 border border-slate-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
               {isUnlocked ? (
-                <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
-                  <Check className="w-5 h-5" /> Web Audio Initialized & Ready
+                <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs sm:text-sm">
+                  <Check className="w-4 h-4 sm:w-5 sm:h-5" /> Web Audio Initialized & Ready
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-                  <AlertTriangle className="w-5 h-5" /> Browser Audio Blocked / Uninitialized
+                <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs sm:text-sm">
+                  <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" /> Browser Audio Blocked / Uninitialized
                 </div>
               )}
             </div>
@@ -88,19 +88,19 @@ export const SoundUnlockModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <button
                 onClick={handleUnlock}
                 disabled={isLoading}
-                className="px-4 py-1.5 text-xs font-bold uppercase rounded bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                className="px-4 py-1.5 text-xs font-bold uppercase rounded bg-emerald-600 hover:bg-emerald-500 text-white transition-colors self-start sm:self-auto"
               >
                 {isLoading ? 'Enabling...' : 'ENABLE SOUND'}
               </button>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-2">
             Modern browsers block unprompted audio playback. Clicking "ENABLE SOUND" establishes AudioContext permissions and permits real-time alert sounds.
           </p>
         </div>
 
         {/* Master Controls */}
-        <div className="mt-5 grid grid-cols-2 gap-4">
+        <div className="mt-4 sm:mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="p-3.5 rounded-lg bg-slate-950 border border-slate-800">
             <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Master Sound Status</div>
             <div className="flex items-center justify-between">
@@ -135,25 +135,25 @@ export const SoundUnlockModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Channel Overview */}
-        <div className="mt-5">
+        <div className="mt-4 sm:mt-5">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-slate-400" /> Channel Profiles (Database Mapped)
           </div>
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
             {profiles.map((p) => (
-              <div key={p.category_code} className="flex items-center justify-between p-2.5 rounded bg-slate-950 border border-slate-800 text-xs">
-                <div>
+              <div key={p.category_code} className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded bg-slate-950 border border-slate-800 text-xs gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span className="font-bold text-slate-200">{p.category_code}</span>
-                  <span className="ml-2 text-slate-400">Vol: {p.volume}%</span>
-                  <span className="ml-2 text-slate-500">Cooldown: {p.cooldown_seconds}s</span>
+                  <span className="text-slate-400">Vol: {p.volume}%</span>
+                  <span className="text-slate-500">Cooldown: {p.cooldown_seconds}s</span>
                   {p.category_code === 'CLASSROOM' && (
-                    <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-semibold text-[10px]">
                       EXPLICITLY MUTED
                     </span>
                   )}
                 </div>
                 {p.category_code !== 'CLASSROOM' && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
                     <button
                       onClick={() => handleTestSound(p.category_code, 'DOWN')}
                       className="px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 text-[11px] font-semibold"

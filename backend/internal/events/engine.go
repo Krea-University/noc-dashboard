@@ -249,8 +249,8 @@ func (e *Engine) HandleDeviceTransition(ctx context.Context, dev *models.Device)
 		// 3b. Mark open incidents resolved
 		_, _ = e.db.Exec(`
 			UPDATE incidents
-			SET status = 'RESOLVED', updated_at = ?
-			WHERE primary_device_id = ? AND status IN ('OPEN', 'INVESTIGATING', 'ACKNOWLEDGED')`, now, dev.ID)
+			SET status = 'RESOLVED', updated_at = ?, resolved_at = ?, resolved_by = 'SYSTEM'
+			WHERE primary_device_id = ? AND status IN ('OPEN', 'INVESTIGATING', 'ACKNOWLEDGED')`, now, now, dev.ID)
 
 		// 4. Broadcast Recovery Banner
 		downtimeStr := formatDuration(downtimeSecs)

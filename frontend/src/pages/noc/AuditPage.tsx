@@ -14,11 +14,11 @@ export const AuditPage: React.FC = () => {
   });
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl font-black text-slate-100 flex items-center gap-2.5">
-            <History className="w-6 h-6 text-purple-400" /> Immutable Operational Audit Trail
+          <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
+            <History className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400 shrink-0" /> Immutable Operational Audit Trail
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Complete Security Audit Log: Logins, FortiGate VLAN Actions, Incident Changes & User Modifications
@@ -29,7 +29,7 @@ export const AuditPage: React.FC = () => {
           <select
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-purple-500 focus:outline-none cursor-pointer"
+            className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-purple-500 focus:outline-none cursor-pointer"
           >
             <option value="">All Actions</option>
             <option value="LOGIN">LOGIN</option>
@@ -43,8 +43,8 @@ export const AuditPage: React.FC = () => {
       </div>
 
       <div className="noc-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div className="table-scroll-container">
+          <table className="w-full text-left text-xs text-slate-300 min-w-[700px]">
             <thead className="bg-slate-900 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4">Timestamp</th>
