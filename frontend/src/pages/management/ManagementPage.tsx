@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
 import { TrendingUp, ShieldCheck, Clock, Award, CheckCircle2, ArrowUpRight, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { api } from '../../api/client';
 
 export const ManagementPage: React.FC = () => {
@@ -88,12 +89,15 @@ export const ManagementPage: React.FC = () => {
             </div>
           </div>
 
-          <button
-            onClick={() => navigate('/noc')}
-            className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold uppercase tracking-wider flex items-center gap-2 text-slate-300 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Return to Operator Console
-          </button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <button
+              onClick={() => navigate('/noc')}
+              className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold uppercase tracking-wider flex items-center gap-2 text-slate-300 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Return to Operator Console
+            </button>
+          </div>
         </div>
 
         {/* Big Executive KPIs */}

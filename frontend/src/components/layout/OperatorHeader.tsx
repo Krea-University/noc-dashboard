@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Volume2, VolumeX, AlertTriangle, Search, User as UserIcon, LogOut, RefreshCw, Radio, Tv } from 'lucide-react';
 import { soundManager } from '../../sound/SoundManager';
 import { SoundUnlockModal } from '../common/SoundUnlockModal';
+import { ThemeToggle } from '../common/ThemeToggle';
 import { api } from '../../api/client';
 import { User, Integration } from '../../types';
 
@@ -167,6 +168,9 @@ export const OperatorHeader: React.FC<Props> = ({
         >
           {isSoundActive ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
         </button>
+
+        {/* Theme Toggle (Light/Dark) */}
+        <ThemeToggle />
 
         {/* Settings Navigation */}
         <button

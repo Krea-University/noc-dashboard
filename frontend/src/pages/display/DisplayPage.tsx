@@ -29,6 +29,7 @@ import { api } from '../../api/client';
 import { soundManager } from '../../sound/SoundManager';
 import { useNocWebSocket, WSMessage } from '../../websocket/useNocWebSocket';
 import { SoundUnlockModal } from '../../components/common/SoundUnlockModal';
+import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { Device, Incident, Alarm, DashboardSummary, Endpoint } from '../../types';
 import { getPrimaryGroup } from '../../utils/endpointGroups';
 
@@ -643,8 +644,9 @@ export const DisplayPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Clock & Sound Control */}
-        <div className="flex items-center gap-4">
+        {/* Clock & Sound Control & Theme Toggle */}
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
           <button
             onClick={() => setSoundModalOpen(true)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${

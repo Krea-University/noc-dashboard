@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check } from 'lucide-react';
+import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette } from 'lucide-react';
 import { api } from '../../api/client';
 import { SoundProfile } from '../../types';
+import { useTheme } from '../../context/ThemeContext';
 
 export const SettingsPage: React.FC = () => {
+  const { theme, setTheme } = useTheme();
   const [simulationMsg, setSimulationMsg] = useState('');
   const [simLoading, setSimLoading] = useState(false);
 
@@ -38,8 +40,81 @@ export const SettingsPage: React.FC = () => {
           <Settings className="w-6 h-6 text-slate-400" /> Command Center Settings & Live Drills
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          System Polling Intervals, Display Wall Retention, Sound Channels & Outage Simulation Suite
+          System Polling Intervals, Display Wall Retention, Appearance & Outage Simulation Suite
         </p>
+      </div>
+
+      {/* Theme & Appearance Configuration */}
+      <div className="noc-card p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <Palette className="w-4 h-4 text-cyan-400" /> Command Center Appearance & Theme
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Personalize your display mode. Your preference is automatically saved and remembered across sessions.
+            </p>
+          </div>
+          <span className="px-2.5 py-1 text-xs font-mono font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 uppercase">
+            Active: {theme} mode
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          <button
+            type="button"
+            onClick={() => setTheme('dark')}
+            className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3.5 ${
+              theme === 'dark'
+                ? 'bg-slate-900 border-cyan-500 ring-2 ring-cyan-500/30 shadow-lg'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-75'
+            }`}
+          >
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-cyan-400">
+              <Moon className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-100">Dark Ops Theme</span>
+                {theme === 'dark' && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-500/20 text-cyan-300">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Ultra-high-contrast OLED black and midnight navy palette. Designed for NOC wall displays, 24/7 dark command rooms, and reduced eye strain.
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTheme('light')}
+            className={`p-4 rounded-xl border text-left transition-all flex items-start gap-3.5 ${
+              theme === 'light'
+                ? 'bg-white border-blue-500 ring-2 ring-blue-500/30 shadow-lg'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-75'
+            }`}
+          >
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-500">
+              <Sun className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-100">Executive White Theme</span>
+                {theme === 'light' && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-500/20 text-blue-400">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Clean, crisp white and light slate interface. Optimized for well-lit office environments, daytime operations, executive reports, and Flutter ERP embedding.
+              </p>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Interactive NOC Outage Simulation Suite (Section 61) */}
