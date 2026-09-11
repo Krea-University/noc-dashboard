@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
 import {
@@ -220,125 +220,115 @@ export const DisplayPage: React.FC = () => {
     };
   }, [isIdle]);
 
-  // Extract FortiGate live WAN Links
-  const wanLinks = useMemo(() => (firewall as any)?.wan_links || [], [firewall]);
-
-  const railtelLink = useMemo(() => {
-    return (
-      wanLinks.find((l: any) => l.interface?.toLowerCase() === 'x3' || (l.isp && l.isp.toLowerCase().includes('railtel'))) || {
+  // Extract FortiGate live WAN Links (supports dynamic N links)
+  const wanLinks = useMemo(() => {
+    const raw: any[] = (firewall as any)?.wan_links || [];
+    if (raw.length > 0) return raw;
+    return [
+      {
         interface: 'x3',
         name: 'Railtel Primary (x3)',
         isp: 'Railtel',
         status: 'UP',
         speed: '3 Gbps',
-        rx_bps: 736668000,
-        tx_bps: 99673000,
+        rx_bps: 1168265000,
+        tx_bps: 87488000,
         latency_ms: 1.74,
-        session_count: 76659,
-      }
-    );
-  }, [wanLinks]);
-
-  const airtelLink = useMemo(() => {
-    return (
-      wanLinks.find((l: any) => l.interface?.toLowerCase() === 'x4' || (l.isp && l.isp.toLowerCase().includes('airtel'))) || {
+        session_count: 78308,
+      },
+      {
         interface: 'x4',
         name: 'Airtel Secondary (x4)',
         isp: 'Airtel',
         status: 'UP',
         speed: '1.2 Gbps',
-        rx_bps: 502077000,
-        tx_bps: 30271000,
+        rx_bps: 597385000,
+        tx_bps: 44203000,
         latency_ms: 3.96,
-        session_count: 25064,
+        session_count: 24060,
+      },
+      {
+        interface: 'port2',
+        name: 'BSNL Backup (port2)',
+        isp: 'BSNL',
+        status: 'UP',
+        speed: '500 Mbps',
+        rx_bps: 78316000,
+        tx_bps: 10251000,
+        latency_ms: 6.79,
+        session_count: 12946,
+      },
+    ];
+  }, [firewall]);
+
+  // Rolling traffic history map for Total and each individual WAN Link
+  const [trafficHistories, setTrafficHistories] = useState<Record<string, Array<{ time: string; inGbps: number; outGbps: number }>>>(() => {
+    const now = Date.now();
+    const makeInitial = (baseIn: number, baseOut: number, factor = 0.5) => {
+      const initial = [];
+      for (let i = 11; i >= 0; i--) {
+        const t = new Date(now - i * 30000);
+        const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        initial.push({
+          time: timeStr,
+          inGbps: +(baseIn + Math.sin(i * factor) * 0.05).toFixed(2),
+          outGbps: +(baseOut + Math.cos(i * factor) * 0.02).toFixed(2),
+        });
       }
-    );
-  }, [wanLinks]);
+      return initial;
+    };
 
-  // Dynamic rolling traffic history for Railtel ILL (3 Gbps)
-  const [railtelTrafficHistory, setRailtelTrafficHistory] = useState<Array<{ time: string; inGbps: number; outGbps: number }>>(() => {
-    const now = Date.now();
-    const initial = [];
-    for (let i = 11; i >= 0; i--) {
-      const t = new Date(now - i * 30000);
-      const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      initial.push({
-        time: timeStr,
-        inGbps: +(0.74 + Math.sin(i * 0.5) * 0.05).toFixed(2),
-        outGbps: +(0.10 + Math.cos(i * 0.5) * 0.02).toFixed(2),
-      });
-    }
-    return initial;
-  });
-
-  // Dynamic rolling traffic history for Airtel ILL (1.2 Gbps)
-  const [airtelTrafficHistory, setAirtelTrafficHistory] = useState<Array<{ time: string; inGbps: number; outGbps: number }>>(() => {
-    const now = Date.now();
-    const initial = [];
-    for (let i = 11; i >= 0; i--) {
-      const t = new Date(now - i * 30000);
-      const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      initial.push({
-        time: timeStr,
-        inGbps: +(0.50 + Math.sin(i * 0.6) * 0.04).toFixed(2),
-        outGbps: +(0.03 + Math.cos(i * 0.6) * 0.01).toFixed(2),
-      });
-    }
-    return initial;
-  });
-
-  // Dynamic rolling traffic history for Aggregate WAN
-  const [tvTrafficHistory, setTvTrafficHistory] = useState<Array<{ time: string; inGbps: number; outGbps: number }>>(() => {
-    const now = Date.now();
-    const initial = [];
-    for (let i = 11; i >= 0; i--) {
-      const t = new Date(now - i * 30000);
-      const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      initial.push({
-        time: timeStr,
-        inGbps: +(1.41 + Math.sin(i * 0.5) * 0.08).toFixed(2),
-        outGbps: +(0.37 + Math.cos(i * 0.5) * 0.04).toFixed(2),
-      });
-    }
-    return initial;
+    return {
+      total: makeInitial(1.84, 0.14, 0.4),
+      x3: makeInitial(1.17, 0.09, 0.5),
+      x4: makeInitial(0.60, 0.04, 0.6),
+      port2: makeInitial(0.08, 0.01, 0.7),
+    };
   });
 
   useEffect(() => {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Railtel
-    const rIn = +(Number(railtelLink.rx_bps || 736668000) / 1e9).toFixed(2);
-    const rOut = +(Number(railtelLink.tx_bps || 99673000) / 1e9).toFixed(2);
-    setRailtelTrafficHistory((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.time === timeStr) return prev;
-      return [...prev.slice(-14), { time: timeStr, inGbps: rIn, outGbps: rOut }];
-    });
+    setTrafficHistories((prev) => {
+      const nextMap: Record<string, Array<{ time: string; inGbps: number; outGbps: number }>> = { ...prev };
 
-    // Airtel
-    const aIn = +(Number(airtelLink.rx_bps || 502077000) / 1e9).toFixed(2);
-    const aOut = +(Number(airtelLink.tx_bps || 30271000) / 1e9).toFixed(2);
-    setAirtelTrafficHistory((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.time === timeStr) return prev;
-      return [...prev.slice(-14), { time: timeStr, inGbps: aIn, outGbps: aOut }];
-    });
+      let sumInBps = 0;
+      let sumOutBps = 0;
 
-    // Aggregate
-    const inVal = summary?.inbound_traffic_bps || ((firewall as any)?.inbound_bps ? Number((firewall as any).inbound_bps) : 1411540000);
-    const outVal = summary?.outbound_traffic_bps || ((firewall as any)?.outbound_bps ? Number((firewall as any).outbound_bps) : 366620000);
-    if (inVal && outVal) {
-      const inGbps = +(inVal / 1e9).toFixed(2);
-      const outGbps = +(outVal / 1e9).toFixed(2);
-      setTvTrafficHistory((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.time === timeStr) return prev;
-        return [...prev.slice(-14), { time: timeStr, inGbps, outGbps }];
+      wanLinks.forEach((link: any, idx: number) => {
+        const key = link.interface || `link_${idx}`;
+        const rx = Number(link.rx_bps || 0);
+        const tx = Number(link.tx_bps || 0);
+        sumInBps += rx;
+        sumOutBps += tx;
+
+        const inGbps = +(rx / 1e9).toFixed(2);
+        const outGbps = +(tx / 1e9).toFixed(2);
+
+        const curHist = nextMap[key] || [];
+        const last = curHist[curHist.length - 1];
+        if (!last || last.time !== timeStr) {
+          nextMap[key] = [...curHist.slice(-14), { time: timeStr, inGbps, outGbps }];
+        }
       });
-    }
-  }, [summary?.inbound_traffic_bps, summary?.outbound_traffic_bps, firewall, railtelLink.rx_bps, railtelLink.tx_bps, airtelLink.rx_bps, airtelLink.tx_bps]);
 
-  const formatBps = (bps?: number, defaultFallback = '1.41 Gbps') => {
+      // Total WAN calculation
+      const totalRx = sumInBps > 0 ? sumInBps : (summary?.inbound_traffic_bps || Number((firewall as any)?.inbound_bps) || 1843967000);
+      const totalTx = sumOutBps > 0 ? sumOutBps : (summary?.outbound_traffic_bps || Number((firewall as any)?.outbound_bps) || 141943000);
+      const totInGbps = +(totalRx / 1e9).toFixed(2);
+      const totOutGbps = +(totalTx / 1e9).toFixed(2);
+
+      const totalHist = nextMap['total'] || [];
+      const lastTot = totalHist[totalHist.length - 1];
+      if (!lastTot || lastTot.time !== timeStr) {
+        nextMap['total'] = [...totalHist.slice(-14), { time: timeStr, inGbps: totInGbps, outGbps: totOutGbps }];
+      }
+
+      return nextMap;
+    });
+  }, [wanLinks, summary?.inbound_traffic_bps, summary?.outbound_traffic_bps, firewall]);
+
+  const formatBps = (bps?: number, defaultFallback = '0 bps') => {
     if (bps === undefined || bps === null || bps <= 0) return defaultFallback;
     if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gbps';
     return (bps / 1e6).toFixed(1) + ' Mbps';
@@ -479,279 +469,226 @@ export const DisplayPage: React.FC = () => {
     return Math.round((serverDevices.reduce((acc, s) => acc + (s.mem_pct || 0), 0) / serverDevices.length) * 10) / 10;
   }, [serverDevices]);
 
-  // ECharts Traffic Option: Railtel Primary (3 Gbps)
-  const railtelOption = useMemo(() => ({
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: '#0a0f1d',
-      borderColor: '#1e293b',
-      textStyle: { color: '#f8fafc', fontSize: 11 },
-      formatter: (params: any) => {
-        if (!Array.isArray(params)) return '';
-        const time = params[0]?.axisValueLabel || '';
-        let s = `<div class="font-mono text-xs font-bold mb-1 text-slate-300">${time}</div>`;
-        for (const p of params) {
-          s += `<div class="flex items-center justify-between gap-3 text-xs font-mono">
-            <span style="color:${p.color}">${p.seriesName}:</span>
-            <span class="font-bold text-white">${p.value} Gbps</span>
-          </div>`;
-        }
-        return s;
-      },
-    },
-    legend: {
-      data: ['Inbound', 'Outbound'],
-      textStyle: { color: '#94a3b8', fontSize: 10 },
-      top: 0,
-      right: 4,
-      icon: 'circle',
-    },
-    grid: { left: '2%', right: '3%', bottom: '8%', top: '18%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: railtelTrafficHistory.map((h) => h.time),
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8', fontSize: 10 },
-    },
-    yAxis: {
-      type: 'value',
-      name: 'Gbps',
-      min: 0,
-      max: 3.0,
-      nameTextStyle: { color: '#94a3b8', fontSize: 10 },
-      axisLine: { lineStyle: { color: '#334155' } },
-      splitLine: { lineStyle: { color: '#1e293b' } },
-      axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (v: number) => `${v}G` },
-    },
-    series: [
-      {
-        name: 'Inbound',
-        type: 'line',
-        smooth: 0.3,
-        showSymbol: false,
-        data: railtelTrafficHistory.map((h) => h.inGbps),
-        itemStyle: { color: '#3b82f6' },
-        lineStyle: { width: 2.5, shadowColor: 'rgba(59, 130, 246, 0.4)', shadowBlur: 6 },
-        areaStyle: {
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(59, 130, 246, 0.4)' },
-              { offset: 1, color: 'rgba(59, 130, 246, 0.0)' },
-            ],
-          },
+  // Reusable dynamic ECharts configuration for Total Bandwidth and individual ILLs
+  const getTrafficOption = useCallback(
+    (
+      history: Array<{ time: string; inGbps: number; outGbps: number }> = [],
+      maxGbps = 3.0,
+      inColor = '#3b82f6',
+      outColor = '#10b981'
+    ) => ({
+      backgroundColor: 'transparent',
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: '#0a0f1d',
+        borderColor: '#1e293b',
+        textStyle: { color: '#f8fafc', fontSize: 11 },
+        formatter: (params: any) => {
+          if (!Array.isArray(params)) return '';
+          const time = params[0]?.axisValueLabel || '';
+          let s = `<div class="font-mono text-xs font-bold mb-1 text-slate-300">${time}</div>`;
+          for (const p of params) {
+            s += `<div class="flex items-center justify-between gap-3 text-xs font-mono">
+              <span style="color:${p.color}">${p.seriesName}:</span>
+              <span class="font-bold text-white">${p.value} Gbps</span>
+            </div>`;
+          }
+          return s;
         },
       },
-      {
-        name: 'Outbound',
-        type: 'line',
-        smooth: 0.3,
-        showSymbol: false,
-        data: railtelTrafficHistory.map((h) => h.outGbps),
-        itemStyle: { color: '#10b981' },
-        lineStyle: { width: 2.5, shadowColor: 'rgba(16, 185, 129, 0.4)', shadowBlur: 6 },
-        areaStyle: {
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(16, 185, 129, 0.3)' },
-              { offset: 1, color: 'rgba(16, 185, 129, 0.0)' },
-            ],
+      legend: {
+        data: ['Inbound', 'Outbound'],
+        textStyle: { color: '#94a3b8', fontSize: 10 },
+        top: 0,
+        right: 4,
+        icon: 'circle',
+      },
+      grid: { left: '2%', right: '3%', bottom: '8%', top: '18%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: history.map((h) => h.time),
+        axisLine: { lineStyle: { color: '#334155' } },
+        axisLabel: { color: '#94a3b8', fontSize: 10 },
+      },
+      yAxis: {
+        type: 'value',
+        name: 'Gbps',
+        min: 0,
+        max: maxGbps,
+        nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+        axisLine: { lineStyle: { color: '#334155' } },
+        splitLine: { lineStyle: { color: '#1e293b' } },
+        axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (v: number) => `${v}G` },
+      },
+      series: [
+        {
+          name: 'Inbound',
+          type: 'line',
+          smooth: 0.3,
+          showSymbol: false,
+          data: history.map((h) => h.inGbps),
+          itemStyle: { color: inColor },
+          lineStyle: { width: 2.5, shadowColor: `${inColor}66`, shadowBlur: 6 },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: `${inColor}55` },
+                { offset: 1, color: `${inColor}00` },
+              ],
+            },
           },
         },
-      },
-    ],
-  }), [railtelTrafficHistory]);
+        {
+          name: 'Outbound',
+          type: 'line',
+          smooth: 0.3,
+          showSymbol: false,
+          data: history.map((h) => h.outGbps),
+          itemStyle: { color: outColor },
+          lineStyle: { width: 2.5, shadowColor: `${outColor}66`, shadowBlur: 6 },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: `${outColor}44` },
+                { offset: 1, color: `${outColor}00` },
+              ],
+            },
+          },
+        },
+      ],
+    }),
+    []
+  );
 
-  // ECharts Traffic Option: Bharti Airtel Secondary (1.2 Gbps)
-  const airtelOption = useMemo(() => ({
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: '#0a0f1d',
-      borderColor: '#1e293b',
-      textStyle: { color: '#f8fafc', fontSize: 11 },
-      formatter: (params: any) => {
-        if (!Array.isArray(params)) return '';
-        const time = params[0]?.axisValueLabel || '';
-        let s = `<div class="font-mono text-xs font-bold mb-1 text-slate-300">${time}</div>`;
-        for (const p of params) {
-          s += `<div class="flex items-center justify-between gap-3 text-xs font-mono">
-            <span style="color:${p.color}">${p.seriesName}:</span>
-            <span class="font-bold text-white">${p.value} Gbps</span>
-          </div>`;
-        }
-        return s;
-      },
-    },
-    legend: {
-      data: ['Inbound', 'Outbound'],
-      textStyle: { color: '#94a3b8', fontSize: 10 },
-      top: 0,
-      right: 4,
-      icon: 'circle',
-    },
-    grid: { left: '2%', right: '3%', bottom: '8%', top: '18%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: airtelTrafficHistory.map((h) => h.time),
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8', fontSize: 10 },
-    },
-    yAxis: {
-      type: 'value',
-      name: 'Gbps',
-      min: 0,
-      max: 1.5,
-      nameTextStyle: { color: '#94a3b8', fontSize: 10 },
-      axisLine: { lineStyle: { color: '#334155' } },
-      splitLine: { lineStyle: { color: '#1e293b' } },
-      axisLabel: { color: '#94a3b8', fontSize: 10, formatter: (v: number) => `${v}G` },
-    },
-    series: [
-      {
-        name: 'Inbound',
-        type: 'line',
-        smooth: 0.3,
-        showSymbol: false,
-        data: airtelTrafficHistory.map((h) => h.inGbps),
-        itemStyle: { color: '#06b6d4' },
-        lineStyle: { width: 2.5, shadowColor: 'rgba(6, 182, 212, 0.4)', shadowBlur: 6 },
-        areaStyle: {
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(6, 182, 212, 0.4)' },
-              { offset: 1, color: 'rgba(6, 182, 212, 0.0)' },
-            ],
-          },
-        },
-      },
-      {
-        name: 'Outbound',
-        type: 'line',
-        smooth: 0.3,
-        showSymbol: false,
-        data: airtelTrafficHistory.map((h) => h.outGbps),
-        itemStyle: { color: '#f59e0b' },
-        lineStyle: { width: 2.5, shadowColor: 'rgba(245, 158, 11, 0.4)', shadowBlur: 6 },
-        areaStyle: {
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(245, 158, 11, 0.3)' },
-              { offset: 1, color: 'rgba(245, 158, 11, 0.0)' },
-            ],
-          },
-        },
-      },
-    ],
-  }), [airtelTrafficHistory]);
+  // Dynamic 1 + N Charts: 1 Total Aggregate WAN + N Individual ILL Links (Railtel, Airtel, BSNL, etc.)
+  const allCharts = useMemo(() => {
+    // 1. Chart 1: Total Aggregate WAN Bandwidth
+    const totalInBps =
+      wanLinks.reduce((acc: number, l: any) => acc + Number(l.rx_bps || 0), 0) ||
+      summary?.inbound_traffic_bps ||
+      Number((firewall as any)?.inbound_bps) ||
+      1843967000;
+    const totalOutBps =
+      wanLinks.reduce((acc: number, l: any) => acc + Number(l.tx_bps || 0), 0) ||
+      summary?.outbound_traffic_bps ||
+      Number((firewall as any)?.outbound_bps) ||
+      141943000;
+    const totalSessions =
+      wanLinks.reduce((acc: number, l: any) => acc + Number(l.session_count || 0), 0) ||
+      Number((firewall as any)?.active_sessions) ||
+      115314;
+    const avgLatency =
+      wanLinks.length > 0
+        ? (wanLinks.reduce((acc: number, l: any) => acc + Number(l.latency_ms || 0), 0) / wanLinks.length).toFixed(1)
+        : '2.8';
 
-  // Combined Traffic Option for TV
-  const tvTrafficOption = useMemo(() => ({
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: '#0a0f1d',
-      borderColor: '#1e293b',
-      textStyle: { color: '#f8fafc', fontSize: 12 },
-      formatter: (params: any) => {
-        if (!Array.isArray(params)) return '';
-        const time = params[0]?.axisValueLabel || '';
-        let s = `<div class="font-mono text-xs font-bold mb-1 text-slate-300">${time}</div>`;
-        for (const p of params) {
-          s += `<div class="flex items-center justify-between gap-4 text-xs font-mono">
-            <span style="color:${p.color}">${p.seriesName}:</span>
-            <span class="font-bold text-white">${p.value} Gbps</span>
-          </div>`;
+    const totalChart = {
+      id: 'total',
+      title: 'Total Campus Bandwidth (All ILLs)',
+      badge: `SD-WAN · ${wanLinks.length} ILLs`,
+      badgeColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+      dotColor: 'bg-emerald-500 shadow-[0_0_8px_#10b981]',
+      inBps: totalInBps,
+      outBps: totalOutBps,
+      latency: `${avgLatency}ms avg`,
+      sessions: `${Number(totalSessions).toLocaleString()} Total Sessions`,
+      status: 'OPERATIONAL',
+      history: trafficHistories['total'] || [],
+      maxGbps: 5.0,
+      inColor: '#3b82f6',
+      outColor: '#10b981',
+    };
+
+    // Styling map by interface / ISP
+    const linkStyleMap: Record<
+      string,
+      { inColor: string; outColor: string; dotColor: string; badgeColor: string; maxGbps: number }
+    > = {
+      x3: {
+        inColor: '#3b82f6',
+        outColor: '#10b981',
+        dotColor: 'bg-blue-500 shadow-[0_0_8px_#3b82f6]',
+        badgeColor: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+        maxGbps: 3.0,
+      },
+      x4: {
+        inColor: '#06b6d4',
+        outColor: '#f59e0b',
+        dotColor: 'bg-cyan-400 shadow-[0_0_8px_#06b6d4]',
+        badgeColor: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
+        maxGbps: 1.5,
+      },
+      port2: {
+        inColor: '#8b5cf6',
+        outColor: '#ec4899',
+        dotColor: 'bg-purple-400 shadow-[0_0_8px_#8b5cf6]',
+        badgeColor: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+        maxGbps: 0.6,
+      },
+    };
+
+    const fallbackPalettes = [
+      {
+        inColor: '#f97316',
+        outColor: '#eab308',
+        dotColor: 'bg-orange-500 shadow-[0_0_8px_#f97316]',
+        badgeColor: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+        maxGbps: 2.0,
+      },
+      {
+        inColor: '#14b8a6',
+        outColor: '#6366f1',
+        dotColor: 'bg-teal-400 shadow-[0_0_8px_#14b8a6]',
+        badgeColor: 'bg-teal-500/10 text-teal-400 border-teal-500/30',
+        maxGbps: 2.0,
+      },
+    ];
+
+    // 2. Charts 2..N+1: Individual ILL Links
+    const illCharts = wanLinks.map((link: any, idx: number) => {
+      const key = (link.interface || '').toLowerCase();
+      const style = linkStyleMap[key] || fallbackPalettes[idx % fallbackPalettes.length];
+
+      let maxG = style.maxGbps;
+      if (!style.maxGbps && link.speed) {
+        const match = String(link.speed).match(/([\d.]+)\s*([GM]bps)/i);
+        if (match) {
+          const val = parseFloat(match[1]);
+          maxG = match[2].toUpperCase() === 'GBPS' ? +(val * 1.1).toFixed(1) : +(val / 1000 * 1.2).toFixed(1);
         }
-        return s;
-      },
-    },
-    legend: {
-      data: ['Inbound', 'Outbound'],
-      textStyle: { color: '#94a3b8', fontSize: 11 },
-      top: 0,
-      right: 12,
-      icon: 'circle',
-    },
-    grid: { left: '2%', right: '2%', bottom: '6%', top: '16%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: tvTrafficHistory.map((h) => h.time),
-      axisLine: { lineStyle: { color: '#334155' } },
-      axisLabel: { color: '#94a3b8', fontSize: 11 },
-    },
-    yAxis: {
-      type: 'value',
-      name: 'Gbps',
-      min: 0,
-      max: 3.5,
-      nameTextStyle: { color: '#94a3b8', fontSize: 11 },
-      axisLine: { lineStyle: { color: '#334155' } },
-      splitLine: { lineStyle: { color: '#1e293b' } },
-      axisLabel: { color: '#94a3b8', fontSize: 11, formatter: (v: number) => `${v}G` },
-    },
-    series: [
-      {
-        name: 'Inbound',
-        type: 'line',
-        smooth: 0.3,
-        showSymbol: false,
-        data: tvTrafficHistory.map((h) => h.inGbps),
-        itemStyle: { color: '#3b82f6' },
-        lineStyle: {
-          width: 3,
-          shadowColor: 'rgba(59, 130, 246, 0.45)',
-          shadowBlur: 8,
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(59, 130, 246, 0.45)' },
-              { offset: 1, color: 'rgba(59, 130, 246, 0.0)' },
-            ],
-          },
-        },
-      },
-      {
-        name: 'Outbound',
-        type: 'line',
-        smooth: 0.3,
-        showSymbol: false,
-        data: tvTrafficHistory.map((h) => h.outGbps),
-        itemStyle: { color: '#10b981' },
-        lineStyle: {
-          width: 3,
-          shadowColor: 'rgba(16, 185, 129, 0.45)',
-          shadowBlur: 8,
-        },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(16, 185, 129, 0.35)' },
-              { offset: 1, color: 'rgba(16, 185, 129, 0.0)' },
-            ],
-          },
-        },
-      },
-    ],
-  }), [tvTrafficHistory]);
+      }
+
+      return {
+        id: link.interface || `ill_${idx}`,
+        title: `${link.isp || link.name || 'ILL'} (${link.speed || '1 Gbps'})`,
+        badge: `${link.interface} · ${link.status || 'UP'}`,
+        badgeColor: style.badgeColor,
+        dotColor: style.dotColor,
+        inBps: link.rx_bps,
+        outBps: link.tx_bps,
+        latency: `${(Number(link.latency_ms) || 2.0).toFixed(1)}ms`,
+        sessions: `${Number(link.session_count || 0).toLocaleString()} Active Sessions`,
+        status: link.status || 'UP',
+        history: trafficHistories[link.interface] || [],
+        maxGbps: maxG || 2.0,
+        inColor: style.inColor,
+        outColor: style.outColor,
+      };
+    });
+
+    return [totalChart, ...illCharts];
+  }, [wanLinks, trafficHistories, summary, firewall]);
 
   // Live dynamic group summaries and OS distributions for View 3
   const displayGroupSummaries = useMemo(() => {
@@ -860,10 +797,11 @@ export const DisplayPage: React.FC = () => {
     };
   }, [summary?.biometrics_up, summary?.biometrics_down, devices]);
 
-  // 10 Campus Services
+  // Campus Critical Services Status Matrix
   const campusServices = [
     { name: 'Railtel Primary ILL (3 Gbps)', status: 'UP', latency: '1.7ms' },
     { name: 'Bharti Airtel Secondary ILL (1.2 Gbps)', status: 'UP', latency: '3.2ms' },
+    { name: 'BSNL Backup ILL (500 Mbps)', status: 'UP', latency: '6.8ms' },
     { name: `Core & Access Switching (${networkStats.switchTotal} Sw)`, status: networkStats.switchDown > 0 ? 'DEG' : 'UP', latency: '1ms' },
     { name: `Campus Wi-Fi Mesh (${networkStats.apTotal} APs)`, status: networkStats.apDown > 0 ? 'DEG' : 'UP', latency: '4ms' },
     { name: `Campus Biometrics (${summary?.biometrics_total || 66} Readers)`, status: (summary?.biometrics_down ?? 0) > 0 ? 'DEG' : 'UP', latency: '12ms' },
@@ -871,7 +809,6 @@ export const DisplayPage: React.FC = () => {
     { name: 'Email & Collaboration (Zoho)', status: 'UP', latency: '14ms' },
     { name: 'Learning Mgmt System (Moodle)', status: 'UP', latency: '22ms' },
     { name: 'Campus ERP System (Azure)', status: 'UP', latency: '28ms' },
-    { name: 'CCTV Surveillance Backbone', status: 'UP', latency: '5ms' },
   ];
 
   // Display Idle Screen
@@ -1171,64 +1108,50 @@ export const DisplayPage: React.FC = () => {
 
             {/* TRAFFIC & RECENT ALARMS */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
-              <div className="col-span-1 lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Graph 1: Railtel Primary ILL (3 Gbps) */}
-                <div className="noc-card p-3 sm:p-4 rounded-xl flex flex-col justify-between border-slate-800 bg-[#0a101d]">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6] animate-pulse" />
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
-                        Railtel Primary ILL (3 Gbps)
-                      </h3>
+              <div className="col-span-1 lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {allCharts.map((chart) => (
+                  <div
+                    key={chart.id}
+                    className="noc-card p-3 sm:p-3.5 rounded-xl flex flex-col justify-between border-slate-800 bg-[#0a101d]"
+                  >
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className={`w-2.5 h-2.5 rounded-full ${chart.dotColor} animate-pulse shrink-0`} />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-200 truncate">
+                          {chart.title}
+                        </h3>
+                      </div>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-bold shrink-0 ${chart.badgeColor}`}>
+                        {chart.badge}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 font-bold">
-                      x3 · OPTICAL
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs font-mono py-1.5 bg-slate-950/60 px-2.5 rounded-lg border border-slate-850 my-1">
-                    <span className="text-blue-400 font-bold">In: {formatBps(railtelLink.rx_bps, '736.7 Mbps')}</span>
-                    <span className="text-emerald-400 font-bold">Out: {formatBps(railtelLink.tx_bps, '99.7 Mbps')}</span>
-                    <span className="text-slate-400">{(railtelLink.latency_ms || 1.7).toFixed(1)}ms</span>
-                  </div>
-                  <div className="flex-1 min-h-[160px] h-[175px] w-full">
-                    <ReactECharts option={railtelOption} style={{ height: '100%', width: '100%' }} notMerge={true} />
-                  </div>
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                    <span className="text-emerald-400 font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> STATUS: UP
-                    </span>
-                    <span className="text-slate-300 font-bold">{Number(railtelLink.session_count || 76659).toLocaleString()} Active Sessions</span>
-                  </div>
-                </div>
 
-                {/* Graph 2: Bharti Airtel Secondary ILL (1.2 Gbps) */}
-                <div className="noc-card p-3 sm:p-4 rounded-xl flex flex-col justify-between border-slate-800 bg-[#0a101d]">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4] animate-pulse" />
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">
-                        Bharti Airtel Secondary ILL (1.2 Gbps)
-                      </h3>
+                    <div className="flex items-center justify-between text-xs font-mono py-1 bg-slate-950/60 px-2.5 rounded-lg border border-slate-850 my-1">
+                      <span className="font-bold" style={{ color: chart.inColor }}>
+                        In: {formatBps(chart.inBps)}
+                      </span>
+                      <span className="font-bold" style={{ color: chart.outColor }}>
+                        Out: {formatBps(chart.outBps)}
+                      </span>
+                      <span className="text-slate-400">{chart.latency}</span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-bold">
-                      x4 · OPTICAL
-                    </span>
+
+                    <div className="flex-1 min-h-[135px] h-[145px] w-full">
+                      <ReactECharts
+                        option={getTrafficOption(chart.history, chart.maxGbps, chart.inColor, chart.outColor)}
+                        style={{ height: '100%', width: '100%' }}
+                        notMerge={true}
+                      />
+                    </div>
+
+                    <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                      <span className="text-emerald-400 font-bold flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> STATUS: {chart.status}
+                      </span>
+                      <span className="text-slate-300 font-bold">{chart.sessions}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs font-mono py-1.5 bg-slate-950/60 px-2.5 rounded-lg border border-slate-850 my-1">
-                    <span className="text-cyan-400 font-bold">In: {formatBps(airtelLink.rx_bps, '502.1 Mbps')}</span>
-                    <span className="text-amber-400 font-bold">Out: {formatBps(airtelLink.tx_bps, '30.3 Mbps')}</span>
-                    <span className="text-slate-400">{(airtelLink.latency_ms || 3.9).toFixed(1)}ms</span>
-                  </div>
-                  <div className="flex-1 min-h-[160px] h-[175px] w-full">
-                    <ReactECharts option={airtelOption} style={{ height: '100%', width: '100%' }} notMerge={true} />
-                  </div>
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                    <span className="text-emerald-400 font-bold flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> STATUS: UP
-                    </span>
-                    <span className="text-slate-300 font-bold">{Number(airtelLink.session_count || 25064).toLocaleString()} Active Sessions</span>
-                  </div>
-                </div>
+                ))}
               </div>
 
               <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl flex flex-col justify-between border-slate-800 bg-[#0a101d]">
@@ -1245,9 +1168,9 @@ export const DisplayPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 overflow-y-auto max-h-[440px] pr-1">
                     {alarms && alarms.length > 0 ? (
-                      alarms.slice(0, 4).map((a) => (
+                      alarms.slice(0, 5).map((a) => (
                         <div
                           key={a.id}
                           className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs hover:border-slate-700 transition-colors"

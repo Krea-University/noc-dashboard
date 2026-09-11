@@ -53,6 +53,7 @@ func (m *MockProvider) GetStatus(ctx context.Context) (*integrations.FirewallSta
 		WANLinks: []integrations.WANLinkDTO{
 			{Interface: "x3", Name: "Railtel Primary", ISP: "Railtel", Status: "UP", Speed: "3 Gbps", RxBPS: 2450000000, TxBPS: 1600000000, LatencyMS: 1.8, PacketLoss: 0.0, SessionCount: 28500},
 			{Interface: "x4", Name: "Airtel Secondary", ISP: "Airtel", Status: "UP", Speed: "1.2 Gbps", RxBPS: 1830000000, TxBPS: 1250000000, LatencyMS: 4.3, PacketLoss: 0.0, SessionCount: 14350},
+			{Interface: "port2", Name: "BSNL Backup", ISP: "BSNL", Status: "UP", Speed: "500 Mbps", RxBPS: 350000000, TxBPS: 120000000, LatencyMS: 6.8, PacketLoss: 0.0, SessionCount: 5400},
 		},
 		LastSeen:       time.Now().UTC(),
 	}, nil
