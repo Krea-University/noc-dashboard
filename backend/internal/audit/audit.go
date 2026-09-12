@@ -1,8 +1,9 @@
-﻿package audit
+package audit
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,8 +43,8 @@ func (s *Service) Log(ctx context.Context, log *models.AuditLog) error {
 	return err
 }
 
-// QueryLogs retrieves audit logs with optional filters and pagination.
-func (s *Service) QueryLogs(ctx context.Context, action string, limit, offset int) ([]models.AuditLog, error) {
+// QueryLogs retrieves audit logs with optional filters (action, username) and pagination.
+func (s *Service) QueryLogs(ctx context.Context, action, username string, limit, offset int) ([]models.AuditLog, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -54,11 +55,21 @@ func (s *Service) QueryLogs(ctx context.Context, action string, limit, offset in
 	query := `
 	SELECT id, user_id, username, action, target_type, target_id, ip_address, user_agent, previous_state_json, new_state_json, result, reason, metadata_json, timestamp
 	FROM audit_logs`
-	args := []interface{}{}
+	var whereClauses []string
+	var args []interface{}
 
 	if action != "" {
-		query += " WHERE action = ?"
+		whereClauses = append(whereClauses, "action = ?")
 		args = append(args, action)
+	}
+
+	if username != "" {
+		whereClauses = append(whereClauses, "LOWER(username) = LOWER(?)")
+		args = append(args, strings.TrimSpace(username))
+	}
+
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
 	query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"

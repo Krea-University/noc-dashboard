@@ -232,3 +232,35 @@ npm run build
 cd backend
 go test ./...
 ```
+
+---
+
+## 11. Security, Bot Protection & Single Sign-On
+
+### Cloudflare Turnstile Integration (Canonical Existing-Widget Flow)
+- **Site Key**: `0x4AAAAAAExldpVxn_Cfx4o7`
+- **Secret Key**: `0x4AAAAAAExldgkxpZiriTiET5EUmmzQmQg` (configured in `.env`)
+- **Flow**:
+  1. Frontend embeds explicit Turnstile widget via `GET /api/auth/config`.
+  2. Frontend sends `turnstile_token` with login request.
+  3. Backend calls `VerifyTurnstileToken` (`https://challenges.cloudflare.com/turnstile/v0/siteverify`).
+  4. Single-use token lifecycle: On failed login attempts, `window.turnstile.reset(widgetId)` resets the challenge to allow retries.
+
+### Google Sign-In (Latest Google Identity Services — GIS)
+- **Script**: `https://accounts.google.com/gsi/client`
+- **Config**: `GOOGLE_CLIENT_ID` in `.env`
+- **Verification**: `POST /api/auth/google` verifies against `https://oauth2.googleapis.com/tokeninfo`.
+- **Institutional Access Rule**:
+  - Existing DB users retain their designated roles (`ADMINISTRATOR`, `OPERATOR`, etc.).
+  - New users with `@krea.edu.in` accounts are auto-provisioned as `VIEWER` (read-only monitoring).
+  - External accounts not in the DB are strictly rejected with HTTP 403 Forbidden.
+
+### Cloudflare Tunnel Support
+- **Visitor IP Detection**: `CloudflareRealIP` middleware checks `CF-Connecting-IP`, `True-Client-IP`, `X-Forwarded-For` (first IP) and assigns it to `r.RemoteAddr`.
+- **Dynamic Secure Cookies**: Sets `Secure: true` when `X-Forwarded-Proto == "https"` or in production behind Cloudflare Tunnel, preserving `SameSite=Lax`.
+- **CORS Support**: `AllowOriginFunc` supports `*.trycloudflare.com` tunnel domains.
+- **WebSockets**: Compatible with Cloudflare Tunnel proxying.
+
+### Per-User Audit Trail
+- Logs `USER_LOGIN`, `USER_LOGIN_FAILED`, `GOOGLE_LOGIN`, `GOOGLE_LOGIN_FAILED`, and `USER_LOGOUT` events.
+- Console UI (`/noc` → Audit Logs) supports user/operator filtering and full text search.

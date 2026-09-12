@@ -71,6 +71,14 @@ type Config struct {
 	NOCAllowedOrigins      []string
 	NOCEmbedAllowedOrigins []string
 
+	// Cloudflare Turnstile Bot Protection
+	TurnstileSiteKey    string
+	TurnstileSecretKey  string
+	TurnstileHostnames  []string
+
+	// Google Identity Services (GIS) Sign-In
+	GoogleClientID string
+
 	// Mode
 	MockMode bool
 }
@@ -127,6 +135,12 @@ func Load(envPath string) (*Config, error) {
 
 		NOCAllowedOrigins:      splitAndTrim(getEnv("NOC_ALLOWED_ORIGINS", "https://erp.krea.edu.in,http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080")),
 		NOCEmbedAllowedOrigins: splitAndTrim(getEnv("NOC_EMBED_ALLOWED_ORIGINS", "https://erp.krea.edu.in,http://localhost:5173")),
+
+		TurnstileSiteKey:   getEnv("TURNSTILE_SITE_KEY", "0x4AAAAAAExldpVxn_Cfx4o7"),
+		TurnstileSecretKey: getEnv("TURNSTILE_SECRET_KEY", "0x4AAAAAAExldgkxpZiriTiET5EUmmzQmQg"),
+		TurnstileHostnames: splitAndTrim(getEnv("TURNSTILE_HOSTNAMES", "")),
+
+		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 
 		MockMode: getEnvBool("MOCK_MODE", strings.ToLower(getEnv("APP_ENV", "production")) != "production"),
 	}

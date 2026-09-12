@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -314,8 +315,86 @@ func (s *Service) ValidateERPJWTEmbedToken(tokenString string) (sub string, scop
 	return sub, scope, nil
 }
 
-// SetSessionCookie writes a secure, HttpOnly session cookie to the response.
-func SetSessionCookie(w http.ResponseWriter, token string, duration time.Duration) {
+// GetUserByEmail retrieves a user by their email address.
+func (s *Service) GetUserByEmail(email string) (*models.User, error) {
+	query := `
+	SELECT u.id, u.username, u.email, u.password_hash, u.role_id, r.name, u.status, u.must_change_password, u.last_login_at, u.created_at, u.updated_at
+	FROM users u
+	JOIN roles r ON u.role_id = r.id
+	WHERE LOWER(u.email) = LOWER(?)`
+
+	user := &models.User{}
+	var lastLogin sqlNullTime
+	err := s.db.QueryRow(query, strings.TrimSpace(email)).Scan(
+		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.RoleID,
+		&user.RoleName, &user.Status, &user.MustChangePassword, &lastLogin, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if lastLogin.Valid {
+		user.LastLoginAt = &lastLogin.Time
+	}
+
+	perms, err := s.GetUserPermissions(user.RoleID)
+	if err == nil {
+		user.Permissions = perms
+	}
+
+	return user, nil
+}
+
+// ProvisionGoogleUser creates a new viewer user for an authorized Google account.
+func (s *Service) ProvisionGoogleUser(email, name string) (*models.User, error) {
+	cleanEmail := strings.ToLower(strings.TrimSpace(email))
+	if cleanEmail == "" {
+		return nil, errors.New("empty email address")
+	}
+
+	// Base username on email prefix before @
+	parts := strings.Split(cleanEmail, "@")
+	baseUsername := parts[0]
+	username := baseUsername
+
+	// Check if username collision exists; if so, append random suffix
+	var count int
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM users WHERE LOWER(username) = LOWER(?)", username).Scan(&count)
+	if count > 0 {
+		username = fmt.Sprintf("%s_%s", baseUsername, uuid.New().String()[:4])
+	}
+
+	// Generate unguessable random password hash for OAuth-only users
+	rawPass := make([]byte, 32)
+	_, _ = rand.Read(rawPass)
+	hash, _ := HashPassword(hex.EncodeToString(rawPass))
+
+	userID := "usr_google_" + uuid.New().String()[:8]
+	now := time.Now().UTC()
+
+	insertSQL := `
+	INSERT INTO users (id, username, email, password_hash, role_id, status, must_change_password, created_at, updated_at)
+	VALUES (?, ?, ?, ?, 'role_viewer', 'ACTIVE', 0, ?, ?)`
+
+	_, err := s.db.Exec(insertSQL, userID, username, cleanEmail, hash, now, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed provisioning google user: %w", err)
+	}
+
+	slog.Info("provisioned new google user", "user_id", userID, "username", username, "email", cleanEmail)
+	return s.GetUserByID(userID)
+}
+
+// SetSessionCookieReq writes a secure, HttpOnly session cookie respecting Cloudflare Tunnel and HTTPS detection.
+func SetSessionCookieReq(w http.ResponseWriter, r *http.Request, token string, duration time.Duration, appEnv string) {
+	isSecure := false
+	if r != nil {
+		if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+			isSecure = true
+		} else if strings.EqualFold(appEnv, "production") && !strings.HasPrefix(r.Host, "localhost") && !strings.HasPrefix(r.Host, "127.0.0.1") {
+			isSecure = true
+		}
+	}
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    token,
@@ -323,9 +402,14 @@ func SetSessionCookie(w http.ResponseWriter, token string, duration time.Duratio
 		Expires:  time.Now().Add(duration),
 		MaxAge:   int(duration.Seconds()),
 		HttpOnly: true,
-		Secure:   false, // Can be true in pure HTTPS
+		Secure:   isSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+// SetSessionCookie writes a secure, HttpOnly session cookie to the response.
+func SetSessionCookie(w http.ResponseWriter, token string, duration time.Duration) {
+	SetSessionCookieReq(w, nil, token, duration, "")
 }
 
 // ClearSessionCookie clears the session cookie.

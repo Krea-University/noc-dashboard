@@ -33,10 +33,22 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   // Auth
-  login: (username: string, password: string) =>
+  getAuthConfig: () =>
+    request<{ turnstile_site_key: string; google_client_id: string }>('/auth/config'),
+  login: (username: string, password: string, turnstileToken?: string) =>
     request<{ user: User; token: string }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({
+        username,
+        password,
+        turnstile_token: turnstileToken,
+        'cf-turnstile-response': turnstileToken,
+      }),
+    }),
+  loginWithGoogle: (credential: string) =>
+    request<{ user: User; token: string }>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
     }),
   logout: () => request<{ message: string }>('/auth/logout', { method: 'POST' }),
   getMe: () => request<{ user: User; scope: string }>('/me'),
@@ -152,9 +164,10 @@ export const api = {
     }),
 
   // Audit & Reports
-  getAuditLogs: (action?: string) => {
+  getAuditLogs: (action?: string, username?: string) => {
     const params = new URLSearchParams();
     if (action) params.set('action', action);
+    if (username) params.set('username', username);
     return request<AuditLog[]>(`/audit?${params.toString()}`);
   },
   getAvailabilityReport: () => request<AvailabilityReport>('/reports/availability'),

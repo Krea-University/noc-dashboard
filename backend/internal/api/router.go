@@ -49,16 +49,28 @@ type RouterDeps struct {
 func SetupRouter(deps *RouterDeps) http.Handler {
 	r := chi.NewRouter()
 
-	// Global Middleware
+	// Global Middleware (Cloudflare Tunnel & Reverse Proxy Real-IP extraction first)
+	r.Use(CloudflareRealIP)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	// CORS Configuration (Strict origins from config)
+	// CORS Configuration (Strict origins from config + Cloudflare trycloudflare tunnels)
 	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins:   deps.Cfg.NOCAllowedOrigins,
+		AllowedOrigins: deps.Cfg.NOCAllowedOrigins,
+		AllowOriginFunc: func(r *http.Request, origin string) bool {
+			if strings.HasSuffix(origin, ".trycloudflare.com") {
+				return true
+			}
+			for _, o := range deps.Cfg.NOCAllowedOrigins {
+				if o == "*" || o == origin {
+					return true
+				}
+			}
+			return false
+		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"},
 		ExposedHeaders:   []string{"Link"},
@@ -96,7 +108,9 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 	r.Get("/api/ws", deps.WSHub.ServeWS)
 
 	// Authentication Endpoints
+	r.Get("/api/auth/config", handleAuthConfig(deps))
 	r.Post("/api/auth/login", handleLogin(deps))
+	r.Post("/api/auth/google", handleGoogleLogin(deps))
 	r.Post("/api/auth/logout", handleLogout(deps))
 	r.Post("/api/embed/session", handleEmbedSession(deps))
 
@@ -228,35 +242,201 @@ func handleHealthIntegrations(deps *RouterDeps) http.HandlerFunc {
 	}
 }
 
+// CloudflareRealIP middleware normalizes r.RemoteAddr by extracting the real client IP from
+// CF-Connecting-IP, True-Client-IP, or X-Forwarded-For headers when running behind Cloudflare Tunnel.
+func CloudflareRealIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if cfIP := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); cfIP != "" {
+			r.RemoteAddr = cfIP
+		} else if trueIP := strings.TrimSpace(r.Header.Get("True-Client-IP")); trueIP != "" {
+			r.RemoteAddr = trueIP
+		} else if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+			parts := strings.Split(xff, ",")
+			if len(parts) > 0 && strings.TrimSpace(parts[0]) != "" {
+				r.RemoteAddr = strings.TrimSpace(parts[0])
+			}
+		} else if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+			r.RemoteAddr = realIP
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func getClientIP(r *http.Request) string {
+	ip := strings.TrimSpace(r.RemoteAddr)
+	if idx := strings.LastIndex(ip, ":"); idx != -1 && !strings.Contains(ip, "]") {
+		return ip[:idx]
+	}
+	return ip
+}
+
+func handleAuthConfig(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"turnstile_site_key": deps.Cfg.TurnstileSiteKey,
+			"google_client_id":   deps.Cfg.GoogleClientID,
+		})
+	}
+}
+
 func handleLogin(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
+			Username            string `json:"username"`
+			Password            string `json:"password"`
+			CFTurnstileResponse string `json:"cf-turnstile-response"`
+			TurnstileToken      string `json:"turnstile_token"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			respondError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
-		ip := r.RemoteAddr
+		turnstileToken := strings.TrimSpace(req.TurnstileToken)
+		if turnstileToken == "" {
+			turnstileToken = strings.TrimSpace(req.CFTurnstileResponse)
+		}
+
+		ip := getClientIP(r)
 		ua := r.UserAgent()
+
+		// Verify Cloudflare Turnstile if configured
+		if deps.Cfg.TurnstileSecretKey != "" {
+			if err := auth.VerifyTurnstileToken(r.Context(), deps.Cfg.TurnstileSecretKey, turnstileToken, ip, "login", deps.Cfg.TurnstileHostnames); err != nil {
+				_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+					Username:  req.Username,
+					Action:    "USER_LOGIN_FAILED",
+					IPAddress: ip,
+					UserAgent: ua,
+					Result:    "FAILED",
+					Reason:    fmt.Sprintf("Turnstile verification failed: %s", err.Error()),
+				})
+				respondError(w, http.StatusForbidden, "Turnstile verification failed: "+err.Error())
+				return
+			}
+		}
+
 		user, token, err := deps.AuthSvc.Authenticate(req.Username, req.Password, ip, ua)
 		if err != nil {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				Username:  req.Username,
+				Action:    "USER_LOGIN_FAILED",
+				IPAddress: ip,
+				UserAgent: ua,
+				Result:    "FAILED",
+				Reason:    err.Error(),
+			})
 			respondError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
 
-		auth.SetSessionCookie(w, token, auth.SessionDuration)
+		auth.SetSessionCookieReq(w, r, token, auth.SessionDuration, deps.Cfg.AppEnv)
 
 		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
 			UserID:    user.ID,
 			Username:  user.Username,
-			Action:    "LOGIN",
+			Action:    "USER_LOGIN",
 			IPAddress: ip,
 			UserAgent: ua,
 			Result:    "SUCCESS",
-			Reason:    "Standard user login",
+			Reason:    "Password authentication successful",
+		})
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"user":  user,
+			"token": token,
+		})
+	}
+}
+
+func handleGoogleLogin(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Credential string `json:"credential"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Credential) == "" {
+			respondError(w, http.StatusBadRequest, "missing google credential")
+			return
+		}
+
+		ip := getClientIP(r)
+		ua := r.UserAgent()
+
+		claims, err := auth.VerifyGoogleIDToken(r.Context(), req.Credential, deps.Cfg.GoogleClientID)
+		if err != nil {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				Action:    "GOOGLE_LOGIN_FAILED",
+				IPAddress: ip,
+				UserAgent: ua,
+				Result:    "FAILED",
+				Reason:    fmt.Sprintf("Google token verification failed: %s", err.Error()),
+			})
+			respondError(w, http.StatusUnauthorized, "Google authentication failed: "+err.Error())
+			return
+		}
+
+		// Find user in database by email
+		user, err := deps.AuthSvc.GetUserByEmail(claims.Email)
+		if err != nil {
+			// Not found in DB - check if authorized institutional account (@krea.edu.in)
+			cleanEmail := strings.ToLower(strings.TrimSpace(claims.Email))
+			if strings.HasSuffix(cleanEmail, "@krea.edu.in") || claims.HostedDomain == "krea.edu.in" {
+				// Auto-provision new user as VIEWER
+				newUser, provErr := deps.AuthSvc.ProvisionGoogleUser(cleanEmail, claims.Name)
+				if provErr != nil {
+					respondError(w, http.StatusInternalServerError, "failed provisioning user: "+provErr.Error())
+					return
+				}
+				user = newUser
+			} else {
+				_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+					Username:  claims.Email,
+					Action:    "GOOGLE_LOGIN_FAILED",
+					IPAddress: ip,
+					UserAgent: ua,
+					Result:    "FAILED",
+					Reason:    "Unauthorized domain: Only @krea.edu.in accounts are permitted",
+				})
+				respondError(w, http.StatusForbidden, "Unauthorized: Only Krea University accounts (@krea.edu.in) are permitted.")
+				return
+			}
+		}
+
+		if user.Status != "ACTIVE" {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				UserID:    user.ID,
+				Username:  user.Username,
+				Action:    "GOOGLE_LOGIN_FAILED",
+				IPAddress: ip,
+				UserAgent: ua,
+				Result:    "FAILED",
+				Reason:    "Account is disabled",
+			})
+			respondError(w, http.StatusForbidden, "User account is disabled")
+			return
+		}
+
+		// Update last login
+		now := time.Now().UTC()
+		_, _ = deps.DB.Exec("UPDATE users SET last_login_at = ? WHERE id = ?", now, user.ID)
+
+		// Create session
+		token, _, err := deps.AuthSvc.CreateSession(user.ID, "noc:full", auth.SessionDuration, ip, ua)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed creating session: "+err.Error())
+			return
+		}
+
+		auth.SetSessionCookieReq(w, r, token, auth.SessionDuration, deps.Cfg.AppEnv)
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:    user.ID,
+			Username:  user.Username,
+			Action:    "GOOGLE_LOGIN",
+			IPAddress: ip,
+			UserAgent: ua,
+			Result:    "SUCCESS",
+			Reason:    fmt.Sprintf("Google Sign-In successful for %s (sub: %s)", claims.Email, claims.Subject),
 		})
 
 		respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -268,10 +448,31 @@ func handleLogin(deps *RouterDeps) http.HandlerFunc {
 
 func handleLogout(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ip := getClientIP(r)
+		ua := r.UserAgent()
+		var userID, username string
+
 		if cookie, err := r.Cookie(auth.SessionCookieName); err == nil {
+			if user, _, err := deps.AuthSvc.ValidateSession(cookie.Value); err == nil && user != nil {
+				userID = user.ID
+				username = user.Username
+			}
 			_ = deps.AuthSvc.DeleteSession(cookie.Value)
 		}
 		auth.ClearSessionCookie(w)
+
+		if username != "" {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				UserID:    userID,
+				Username:  username,
+				Action:    "USER_LOGOUT",
+				IPAddress: ip,
+				UserAgent: ua,
+				Result:    "SUCCESS",
+				Reason:    "User initiated logout",
+			})
+		}
+
 		respondJSON(w, http.StatusOK, map[string]string{"message": "logged out successfully"})
 	}
 }
@@ -1659,7 +1860,8 @@ func handleListActions(deps *RouterDeps) http.HandlerFunc {
 func handleListAuditLogs(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		action := r.URL.Query().Get("action")
-		logs, err := deps.AuditSvc.QueryLogs(r.Context(), action, 100, 0)
+		username := r.URL.Query().Get("username")
+		logs, err := deps.AuditSvc.QueryLogs(r.Context(), action, username, 100, 0)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return

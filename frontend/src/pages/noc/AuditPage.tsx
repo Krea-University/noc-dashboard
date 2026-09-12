@@ -6,11 +6,25 @@ import { AuditLog } from '../../types';
 
 export const AuditPage: React.FC = () => {
   const [actionFilter, setActionFilter] = useState('');
+  const [usernameFilter, setUsernameFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const { data: logs, isLoading } = useQuery({
-    queryKey: ['audit-logs', actionFilter],
-    queryFn: () => api.getAuditLogs(actionFilter || undefined),
+  const { data: rawLogs, isLoading } = useQuery({
+    queryKey: ['audit-logs', actionFilter, usernameFilter],
+    queryFn: () => api.getAuditLogs(actionFilter || undefined, usernameFilter || undefined),
     refetchInterval: 15000,
+  });
+
+  const logs = rawLogs?.filter((l) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (l.reason && l.reason.toLowerCase().includes(q)) ||
+      (l.ip_address && l.ip_address.toLowerCase().includes(q)) ||
+      (l.target_id && l.target_id.toLowerCase().includes(q)) ||
+      (l.username && l.username.toLowerCase().includes(q)) ||
+      (l.action && l.action.toLowerCase().includes(q))
+    );
   });
 
   return (
@@ -25,14 +39,40 @@ export const AuditPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search logs..."
+              className="pl-8 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 placeholder:text-slate-600 focus:border-purple-500 focus:outline-none w-36 sm:w-48"
+            />
+          </div>
+
+          {/* User/Operator Filter */}
+          <input
+            type="text"
+            value={usernameFilter}
+            onChange={(e) => setUsernameFilter(e.target.value)}
+            placeholder="Filter by user..."
+            className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 placeholder:text-slate-600 focus:border-purple-500 focus:outline-none w-32 sm:w-40 font-mono"
+          />
+
+          {/* Action Filter */}
           <select
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-purple-500 focus:outline-none cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-purple-500 focus:outline-none cursor-pointer"
           >
             <option value="">All Actions</option>
-            <option value="LOGIN">LOGIN</option>
+            <option value="USER_LOGIN">USER_LOGIN</option>
+            <option value="USER_LOGIN_FAILED">USER_LOGIN_FAILED</option>
+            <option value="GOOGLE_LOGIN">GOOGLE_LOGIN</option>
+            <option value="GOOGLE_LOGIN_FAILED">GOOGLE_LOGIN_FAILED</option>
+            <option value="USER_LOGOUT">USER_LOGOUT</option>
             <option value="VLAN_INTERNET_DISABLE">VLAN_INTERNET_DISABLE</option>
             <option value="VLAN_INTERNET_ENABLE">VLAN_INTERNET_ENABLE</option>
             <option value="ALARM_ACKNOWLEDGED">ALARM_ACKNOWLEDGED</option>

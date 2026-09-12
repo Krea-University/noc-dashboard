@@ -1,8 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, Lock, User, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { ShieldCheck, Lock, User, ArrowRight, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: string | HTMLElement,
+        params: {
+          sitekey: string;
+          action?: string;
+          theme?: 'auto' | 'light' | 'dark';
+          callback?: (token: string) => void;
+          'error-callback'?: () => void;
+          'expired-callback'?: () => void;
+        }
+      ) => string;
+      reset: (widgetId: string) => void;
+      remove: (widgetId: string) => void;
+    };
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+            auto_select?: boolean;
+            cancel_on_tap_outside?: boolean;
+          }) => void;
+          renderButton: (
+            parent: HTMLElement,
+            options: {
+              theme?: string;
+              size?: string;
+              type?: string;
+              shape?: string;
+              text?: string;
+              logo_alignment?: string;
+              width?: number;
+            }
+          ) => void;
+        };
+      };
+    };
+  }
+}
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +57,12 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   // Safely parse redirect query parameter (disallowing protocol-relative URLs)
   const rawRedirect = searchParams.get('redirect');
@@ -29,19 +79,118 @@ export const LoginPage: React.FC = () => {
     retry: false,
   });
 
+  // Fetch dynamic public auth configuration (Turnstile site key & Google client ID)
+  const { data: authConfig } = useQuery({
+    queryKey: ['auth-config'],
+    queryFn: api.getAuthConfig,
+    staleTime: Infinity,
+  });
+
   useEffect(() => {
     if (meData?.user) {
       navigate(redirectTarget, { replace: true });
     }
   }, [meData, navigate, redirectTarget]);
 
+  // Initialize Cloudflare Turnstile explicit widget
+  useEffect(() => {
+    const siteKey = authConfig?.turnstile_site_key;
+    if (!siteKey || turnstileWidgetIdRef.current) return;
+
+    const interval = setInterval(() => {
+      if (window.turnstile && turnstileContainerRef.current) {
+        clearInterval(interval);
+        try {
+          const widgetId = window.turnstile.render(turnstileContainerRef.current, {
+            sitekey: siteKey,
+            action: 'login',
+            theme: 'dark',
+            callback: (token: string) => {
+              setTurnstileToken(token);
+              setErrorMsg('');
+            },
+            'error-callback': () => {
+              setTurnstileToken('');
+            },
+            'expired-callback': () => {
+              setTurnstileToken('');
+            },
+          });
+          turnstileWidgetIdRef.current = widgetId;
+        } catch {
+          // Ignore if already rendered
+        }
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [authConfig?.turnstile_site_key]);
+
+  // Handle Google OAuth Credential
+  const handleGoogleCredentialResponse = async (response: { credential: string }) => {
+    setErrorMsg('');
+    setIsGoogleLoading(true);
+    try {
+      await api.loginWithGoogle(response.credential);
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      navigate(redirectTarget, { replace: true });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('Google authentication failed. Only @krea.edu.in accounts are permitted.');
+      }
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  // Initialize Google Identity Services (GIS) button
+  useEffect(() => {
+    const clientId = authConfig?.google_client_id;
+    if (!clientId) return;
+
+    const interval = setInterval(() => {
+      if (window.google?.accounts?.id && googleBtnRef.current) {
+        clearInterval(interval);
+        try {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleGoogleCredentialResponse,
+            auto_select: false,
+          });
+          googleBtnRef.current.innerHTML = '';
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'filled_black',
+            size: 'large',
+            shape: 'rectangular',
+            text: 'continue_with',
+            logo_alignment: 'left',
+            width: 360,
+          });
+        } catch {
+          // Ignore if already initialized
+        }
+      }
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [authConfig?.google_client_id]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+
+    // Check Turnstile token if site key configured
+    if (authConfig?.turnstile_site_key && !turnstileToken) {
+      setErrorMsg('Please verify the Cloudflare Turnstile security check.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      await api.login(username, password);
+      await api.login(username, password, turnstileToken);
       await queryClient.invalidateQueries({ queryKey: ['me'] });
       navigate(redirectTarget, { replace: true });
     } catch (err: unknown) {
@@ -49,6 +198,11 @@ export const LoginPage: React.FC = () => {
         setErrorMsg(err.message);
       } else {
         setErrorMsg('Authentication failed. Please check your credentials.');
+      }
+      // Single-use token lifecycle: reset Turnstile on failed attempt to allow fresh retry
+      if (window.turnstile && turnstileWidgetIdRef.current) {
+        window.turnstile.reset(turnstileWidgetIdRef.current);
+        setTurnstileToken('');
       }
     } finally {
       setIsLoading(false);
@@ -100,6 +254,33 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
+        {/* Google Single Sign-On Section */}
+        {authConfig?.google_client_id ? (
+          <div className="space-y-3">
+            <div className="flex justify-center w-full min-h-[44px]">
+              {isGoogleLoading ? (
+                <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs w-full">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                  <span>Signing in with Google...</span>
+                </div>
+              ) : (
+                <div ref={googleBtnRef} className="w-full flex justify-center" />
+              )}
+            </div>
+
+            <div className="relative my-3">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-800/80" />
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase">
+                <span className="bg-[#0a0f18] px-3 text-slate-500 font-mono tracking-widest">
+                  OR OPERATOR CREDENTIALS
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
@@ -144,22 +325,36 @@ export const LoginPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Cloudflare Turnstile Bot Protection Widget */}
+          <div className="flex flex-col items-center justify-center min-h-[66px] my-2">
+            <div ref={turnstileContainerRef} className="cf-turnstile" />
+          </div>
+
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isGoogleLoading}
             className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20 hover:shadow-blue-600/35 active:scale-[0.99] disabled:opacity-50 mt-2"
           >
-            {isLoading ? 'Authenticating...' : 'Sign In To Console'}
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Authenticating...</span>
+              </>
+            ) : (
+              <>
+                <span>Sign In To Console</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 
         <div className="pt-4 border-t border-slate-800/70 flex items-center justify-between text-[11px] text-slate-500">
           <span className="flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            TLS 1.3 Encrypted
+            Cloudflare Bot Protected
           </span>
-          <span>RBAC Enforced</span>
+          <span className="font-mono text-[10px]">RBAC Enforced</span>
         </div>
       </div>
     </div>
