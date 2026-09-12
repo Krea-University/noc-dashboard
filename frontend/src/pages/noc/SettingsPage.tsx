@@ -232,9 +232,9 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
-            <span className="text-slate-500 font-semibold block">TV Idle Screen Timeout</span>
+            <span className="text-slate-500 font-semibold block">TV Display Screensaver</span>
             <span className="text-slate-200 font-mono font-bold">
-              {settings?.display_idle_timeout_minutes || '30'} minutes
+              No Sleep (Default 24/7 Awake)
             </span>
           </div>
 

@@ -2,6 +2,7 @@ import {
   User, Role, Device, DeviceHistory, Endpoint, CustomGroup, Alarm, Incident,
   VLAN, ActionJob, ImpactEstimate, AuditLog, SoundProfile,
   DisplayDevice, DashboardSummary, ProblemDevice, AvailabilityReport,
+  VlanLogsReportResponse,
 } from '../types';
 
 const API_BASE = '/api';
@@ -162,6 +163,13 @@ export const api = {
     if (provider) params.set('provider', provider);
     if (range) params.set('range', range);
     return request<any>(`/reports/llp?${params.toString()}`);
+  },
+  getVlanLogsReport: (range?: string, action?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (range) params.set('range', range);
+    if (action) params.set('action', action);
+    if (search) params.set('search', search);
+    return request<VlanLogsReportResponse>(`/reports/vlan-logs?${params.toString()}`);
   },
 
   // NOC Displays

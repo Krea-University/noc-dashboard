@@ -263,6 +263,44 @@ export interface AuditLog {
   timestamp: string;
 }
 
+export interface VlanLogReportItem {
+  id: string;
+  timestamp: string;
+  timestamp_ist: string;
+  action: string;
+  action_label: 'DISABLE' | 'ENABLE';
+  vlan_id: number;
+  vlan_name: string;
+  subnet: string;
+  gateway: string;
+  policy_id: number;
+  user_id?: string;
+  username: string;
+  user_role: string;
+  ip_address: string;
+  user_agent: string;
+  result: 'SUCCESS' | 'FAILED';
+  reason: string;
+  previous_status: string;
+  new_status: string;
+  fortigate_verified: boolean;
+}
+
+export interface VlanLogsReportResponse {
+  generated_at: string;
+  generated_at_ist: string;
+  range: string;
+  total_events: number;
+  disable_count: number;
+  enable_count: number;
+  success_count: number;
+  failed_count: number;
+  success_rate: number;
+  unique_users_count: number;
+  impacted_vlans_count: number;
+  logs: VlanLogReportItem[];
+}
+
 export interface SoundProfile {
   id: string;
   category_code: string;

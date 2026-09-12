@@ -141,6 +141,7 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		// Reports & Sound
 		api.Get("/api/reports/availability", handleReportAvailability(deps))
 		api.Get("/api/reports/llp", handleReportLLP(deps))
+		api.Get("/api/reports/vlan-logs", handleReportVlanLogs(deps))
 		api.Get("/api/sound/profiles", handleListSoundProfiles(deps))
 	})
 
@@ -2339,6 +2340,303 @@ func handleReportLLP(deps *RouterDeps) http.HandlerFunc {
 		}
 
 		respondJSON(w, http.StatusOK, response)
+	}
+}
+
+func handleReportVlanLogs(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rangeParam := strings.ToLower(r.URL.Query().Get("range"))
+		actionParam := strings.ToUpper(r.URL.Query().Get("action"))
+		searchParam := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+
+		// Determine time cutoff
+		now := time.Now().UTC()
+		var startTime time.Time
+		switch rangeParam {
+		case "24h":
+			startTime = now.Add(-24 * time.Hour)
+		case "7d":
+			startTime = now.Add(-7 * 24 * time.Hour)
+		case "30d":
+			startTime = now.Add(-30 * 24 * time.Hour)
+		default:
+			// "all" or empty -> all time (e.g. last 1 year)
+			startTime = now.Add(-365 * 24 * time.Hour)
+		}
+
+		// Query audit_logs for VLAN actions
+		baseQuery := `
+			SELECT 
+				id, user_id, username, action, target_type, target_id,
+				ip_address, user_agent, previous_state_json, new_state_json,
+				result, reason, metadata_json, timestamp
+			FROM audit_logs
+			WHERE (action IN ('VLAN_INTERNET_DISABLE', 'VLAN_INTERNET_ENABLE') OR target_type = 'VLAN')
+			  AND timestamp >= ?`
+
+		args := []interface{}{startTime}
+		if actionParam == "DISABLE" || actionParam == "VLAN_INTERNET_DISABLE" {
+			baseQuery += " AND action = 'VLAN_INTERNET_DISABLE'"
+		} else if actionParam == "ENABLE" || actionParam == "VLAN_INTERNET_ENABLE" {
+			baseQuery += " AND action = 'VLAN_INTERNET_ENABLE'"
+		}
+		baseQuery += " ORDER BY timestamp DESC LIMIT 200"
+
+		rows, err := deps.DB.QueryContext(r.Context(), baseQuery, args...)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed querying vlan audit logs: "+err.Error())
+			return
+		}
+		defer rows.Close()
+
+		// Preload VLAN metadata (name, subnet, policy_id)
+		type vlanMeta struct {
+			Name     string
+			Subnet   string
+			Gateway  string
+			PolicyID int
+		}
+		vlanCache := make(map[int]vlanMeta)
+		vRows, vErr := deps.DB.Query("SELECT vlan_id, name, subnet, gateway, fortigate_policy_id FROM vlans")
+		if vErr == nil {
+			defer vRows.Close()
+			for vRows.Next() {
+				var vid, polID int
+				var vname, sub, gw string
+				if err := vRows.Scan(&vid, &vname, &sub, &gw, &polID); err == nil {
+					vlanCache[vid] = vlanMeta{Name: vname, Subnet: sub, Gateway: gw, PolicyID: polID}
+				}
+			}
+		}
+
+		// Preload User Roles
+		userRoles := make(map[string]string)
+		uRows, uErr := deps.DB.Query(`
+			SELECT u.username, r.name 
+			FROM users u 
+			LEFT JOIN roles r ON u.role_id = r.id
+		`)
+		if uErr == nil {
+			defer uRows.Close()
+			for uRows.Next() {
+				var uName string
+				var rName *string
+				if err := uRows.Scan(&uName, &rName); err == nil {
+					if rName != nil {
+						userRoles[uName] = *rName
+					} else {
+						userRoles[uName] = "OPERATOR"
+					}
+				}
+			}
+		}
+
+		kolkataLoc, _ := time.LoadLocation("Asia/Kolkata")
+		if kolkataLoc == nil {
+			kolkataLoc = time.FixedZone("IST", 5*3600+1800)
+		}
+
+		type VlanReportItem struct {
+			ID                string `json:"id"`
+			Timestamp         string `json:"timestamp"`
+			TimestampIST      string `json:"timestamp_ist"`
+			Action            string `json:"action"`
+			ActionLabel       string `json:"action_label"`
+			VlanID            int    `json:"vlan_id"`
+			VlanName          string `json:"vlan_name"`
+			Subnet            string `json:"subnet"`
+			Gateway           string `json:"gateway"`
+			PolicyID          int    `json:"policy_id"`
+			UserID            string `json:"user_id"`
+			Username          string `json:"username"`
+			UserRole          string `json:"user_role"`
+			IPAddress         string `json:"ip_address"`
+			UserAgent         string `json:"user_agent"`
+			Result            string `json:"result"`
+			Reason            string `json:"reason"`
+			PreviousStatus    string `json:"previous_status"`
+			NewStatus         string `json:"new_status"`
+			FortiGateVerified bool   `json:"fortigate_verified"`
+		}
+
+		var items []VlanReportItem
+		totalEvents := 0
+		disableCount := 0
+		enableCount := 0
+		successCount := 0
+		failedCount := 0
+		userSet := make(map[string]bool)
+		vlanSet := make(map[int]bool)
+
+		for rows.Next() {
+			var id, action, targetType, targetID, result string
+			var userID, ip, ua, prev, newS, reason, meta *string
+			var username string
+			var ts time.Time
+
+			if scanErr := rows.Scan(
+				&id, &userID, &username, &action, &targetType, &targetID,
+				&ip, &ua, &prev, &newS, &result, &reason, &meta, &ts,
+			); scanErr != nil {
+				continue
+			}
+
+			// Parse target VLAN ID
+			var vid int
+			_, _ = fmt.Sscanf(strings.TrimPrefix(targetID, "vlan_"), "%d", &vid)
+			if vid == 0 && prev != nil {
+				var pMap map[string]interface{}
+				if json.Unmarshal([]byte(*prev), &pMap) == nil {
+					if vVal, ok := pMap["vlan_id"].(float64); ok {
+						vid = int(vVal)
+					}
+				}
+			}
+
+			vName := fmt.Sprintf("VLAN %d", vid)
+			vSubnet := ""
+			vGateway := ""
+			vPolicyID := 0
+			if vm, ok := vlanCache[vid]; ok {
+				vName = vm.Name
+				vSubnet = vm.Subnet
+				vGateway = vm.Gateway
+				vPolicyID = vm.PolicyID
+			}
+
+			// Parse previous and new statuses
+			prevStatus := "UNKNOWN"
+			if prev != nil {
+				var pMap map[string]interface{}
+				if json.Unmarshal([]byte(*prev), &pMap) == nil {
+					if st, ok := pMap["internet_status"].(string); ok {
+						prevStatus = st
+					}
+				}
+			}
+
+			newStatus := "UNKNOWN"
+			verified := false
+			if newS != nil {
+				var nMap map[string]interface{}
+				if json.Unmarshal([]byte(*newS), &nMap) == nil {
+					if st, ok := nMap["internet_status"].(string); ok {
+						newStatus = st
+					}
+					if vSt, ok := nMap["verified_status"].(string); ok && vSt != "" {
+						verified = true
+					}
+				}
+			}
+			if result == "SUCCESS" {
+				verified = true
+			}
+
+			uRole := "OPERATOR"
+			if r, ok := userRoles[username]; ok {
+				uRole = r
+			} else if username == "admin" {
+				uRole = "ADMINISTRATOR"
+			}
+
+			uIP := "127.0.0.1"
+			if ip != nil && *ip != "" {
+				uIP = *ip
+			}
+			uAgent := "Web Console"
+			if ua != nil && *ua != "" {
+				uAgent = *ua
+			}
+			uReason := "N/A"
+			if reason != nil && *reason != "" {
+				uReason = *reason
+			}
+			uID := ""
+			if userID != nil {
+				uID = *userID
+			}
+
+			actionLabel := "DISABLE"
+			if strings.Contains(strings.ToUpper(action), "ENABLE") {
+				actionLabel = "ENABLE"
+				enableCount++
+			} else {
+				disableCount++
+			}
+
+			if result == "SUCCESS" {
+				successCount++
+			} else {
+				failedCount++
+			}
+
+			totalEvents++
+			userSet[username] = true
+			if vid > 0 {
+				vlanSet[vid] = true
+			}
+
+			item := VlanReportItem{
+				ID:                id,
+				Timestamp:         ts.UTC().Format(time.RFC3339),
+				TimestampIST:      ts.In(kolkataLoc).Format("02 Jan 2006, 15:04:05 IST"),
+				Action:            action,
+				ActionLabel:       actionLabel,
+				VlanID:            vid,
+				VlanName:          vName,
+				Subnet:            vSubnet,
+				Gateway:           vGateway,
+				PolicyID:          vPolicyID,
+				UserID:            uID,
+				Username:          username,
+				UserRole:          uRole,
+				IPAddress:         uIP,
+				UserAgent:         uAgent,
+				Result:            result,
+				Reason:            uReason,
+				PreviousStatus:    prevStatus,
+				NewStatus:         newStatus,
+				FortiGateVerified: verified,
+			}
+
+			// Apply search filter if present
+			if searchParam != "" {
+				match := strings.Contains(strings.ToLower(item.Username), searchParam) ||
+					strings.Contains(strings.ToLower(item.IPAddress), searchParam) ||
+					strings.Contains(strings.ToLower(item.VlanName), searchParam) ||
+					strings.Contains(fmt.Sprintf("%d", item.VlanID), searchParam) ||
+					strings.Contains(strings.ToLower(item.Reason), searchParam) ||
+					strings.Contains(strings.ToLower(item.ActionLabel), searchParam) ||
+					strings.Contains(fmt.Sprintf("%d", item.PolicyID), searchParam)
+				if !match {
+					continue
+				}
+			}
+
+			items = append(items, item)
+		}
+
+		successRate := 100.0
+		if totalEvents > 0 {
+			successRate = math.Round((float64(successCount)/float64(totalEvents))*1000) / 10
+		}
+
+		resp := map[string]interface{}{
+			"generated_at":         now.Format(time.RFC3339),
+			"generated_at_ist":     now.In(kolkataLoc).Format("02 Jan 2006, 15:04:05 IST"),
+			"range":                rangeParam,
+			"total_events":         totalEvents,
+			"disable_count":        disableCount,
+			"enable_count":         enableCount,
+			"success_count":        successCount,
+			"failed_count":         failedCount,
+			"success_rate":         successRate,
+			"unique_users_count":   len(userSet),
+			"impacted_vlans_count": len(vlanSet),
+			"logs":                 items,
+		}
+
+		respondJSON(w, http.StatusOK, resp)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -64,6 +65,16 @@ func main() {
 	if err := db.RunMigrations(migrationsDir); err != nil {
 		slog.Error("database migrations failed", "error", err)
 		os.Exit(1)
+	}
+
+	// In production mode, automatically purge all mock and seeded operational data
+	if strings.ToLower(cfg.AppEnv) == "production" || !cfg.MockMode {
+		slog.Info("production mode active: purging all seeding and mock operational data from database...")
+		if err := db.PurgeSeedData(context.Background()); err != nil {
+			slog.Warn("seed purge completed with warning", "error", err)
+		} else {
+			slog.Info("production database clean: all seeding and mock data successfully removed")
+		}
 	}
 
 	// 4. Initialize Core Services

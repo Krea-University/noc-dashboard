@@ -168,6 +168,47 @@ func (db *DB) RunMigrations(migrationsDir string) error {
 	return nil
 }
 
+// PurgeSeedData removes all mock and seeded operational data from the database.
+// This is executed automatically when the application runs in production mode.
+func (db *DB) PurgeSeedData(ctx context.Context) error {
+	queries := []string{
+		// 1. Purge seeded mock audit logs (preserve real operator audit records)
+		`DELETE FROM audit_logs WHERE id LIKE 'aud_vlan_%' OR id LIKE 'aud_mock_%' OR username IN ('demo', 'mock_user')`,
+
+		// 2. Purge seeded mock alarms
+		`DELETE FROM alarms WHERE source_id LIKE 'mock_%' OR source_id LIKE 'opm_alm_%' OR id IN ('alm_01', 'alm_02', 'alm_03', 'alm_04') OR id LIKE 'alm_mock_%'`,
+
+		// 3. Purge seeded mock incidents and timelines
+		`DELETE FROM incident_timeline WHERE incident_id IN ('inc_01', 'inc_02') OR incident_id LIKE 'inc_mock_%'`,
+		`DELETE FROM incidents WHERE id IN ('inc_01', 'inc_02') OR id LIKE 'inc_mock_%'`,
+
+		// 4. Purge seeded mock action jobs
+		`DELETE FROM action_jobs WHERE id LIKE 'job_mock_%' OR id IN ('job_01', 'job_02') OR username IN ('demo', 'mock_user')`,
+
+		// 5. Purge seeded mock endpoints
+		`DELETE FROM endpoints WHERE source_system = 'mock' OR source_id LIKE 'epc_mock_%' OR id IN ('ep_01', 'ep_02', 'ep_03', 'ep_04', 'ep_05', 'ep_06')`,
+
+		// 6. Purge seeded mock biometric metadata
+		`DELETE FROM biometric_metadata WHERE id IN ('bmd_01', 'bmd_03', 'bmd_20') OR device_id LIKE 'dev_bio_%'`,
+
+		// 7. Purge seeded mock interfaces
+		`DELETE FROM interfaces WHERE id IN ('if_01', 'if_02', 'if_03', 'if_04') OR device_id LIKE 'dev_core_%' OR device_id LIKE 'dev_dist_%' OR device_id LIKE 'dev_acc_%' OR device_id LIKE 'dev_srv_%'`,
+
+		// 8. Purge seeded mock devices & telemetry
+		`DELETE FROM device_telemetry WHERE device_id LIKE 'dev_core_%' OR device_id LIKE 'dev_dist_%' OR device_id LIKE 'dev_acc_%' OR device_id LIKE 'dev_srv_%' OR device_id LIKE 'dev_bio_%'`,
+		`DELETE FROM devices WHERE source_system = 'mock' OR id LIKE 'dev_core_%' OR id LIKE 'dev_dist_%' OR id LIKE 'dev_acc_%' OR id LIKE 'dev_srv_%' OR id LIKE 'dev_bio_%'`,
+	}
+
+	for _, q := range queries {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			slog.Warn("purge seed query executed with warning", "query", q, "error", err)
+		}
+	}
+
+	slog.Info("production database purged: all seeding and mock operational data cleared")
+	return nil
+}
+
 func splitSQLStatements(sqlScript string) []string {
 	var statements []string
 	var current strings.Builder

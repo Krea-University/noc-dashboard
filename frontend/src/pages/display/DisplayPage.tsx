@@ -25,6 +25,10 @@ import {
   XCircle,
   RefreshCw,
   LayoutDashboard,
+  Monitor,
+  MonitorOff,
+  Coffee,
+  Moon,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
@@ -58,10 +62,30 @@ export const DisplayPage: React.FC = () => {
     downtimeString: string;
   } | null>(null);
 
-  // Display Idle State (Section 35)
+  // Display Idle State & No Sleep Mode (Section 35)
+  // Default setting is TRUE (No Sleep / 24/7 TV Wall Display active by default)
+  const [noSleep, setNoSleep] = useState<boolean>(() => {
+    const stored = localStorage.getItem('noc_no_sleep');
+    if (stored !== null) return stored === 'true';
+    const legacy = localStorage.getItem('noc_screensaver_disabled');
+    if (legacy !== null) return legacy === 'true';
+    return true; // Default setting: No Sleep is ON
+  });
   const [isIdle, setIsIdle] = useState(false);
   const lastInteractionRef = useRef(Date.now());
   const idleTimeoutMs = 30 * 60 * 1000; // 30 minutes
+
+  const toggleNoSleep = () => {
+    setNoSleep((prev) => {
+      const next = !prev;
+      localStorage.setItem('noc_no_sleep', String(next));
+      localStorage.setItem('noc_screensaver_disabled', String(next));
+      if (next) {
+        setIsIdle(false);
+      }
+      return next;
+    });
+  };
 
   // Live Asia/Kolkata Clock
   const [timeStr, setTimeStr] = useState('');
@@ -195,8 +219,45 @@ export const DisplayPage: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [isPaused, isIdle, criticalTakeover, pages.length]);
 
+  // Screen Wake Lock API to prevent physical display sleep when No Sleep is active
+  useEffect(() => {
+    if (!noSleep) return;
+
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch {
+        // Silently handled if not supported or denied
+      }
+    };
+
+    requestWakeLock();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && noSleep) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, [noSleep]);
+
   // Display Idle Activity Detection
   useEffect(() => {
+    if (noSleep) {
+      if (isIdle) setIsIdle(false);
+      return;
+    }
+
     const handleActivity = () => {
       lastInteractionRef.current = Date.now();
       if (isIdle) setIsIdle(false);
@@ -207,7 +268,7 @@ export const DisplayPage: React.FC = () => {
     window.addEventListener('touchstart', handleActivity);
 
     const idleCheck = setInterval(() => {
-      if (!isIdle && Date.now() - lastInteractionRef.current > idleTimeoutMs) {
+      if (!noSleep && !isIdle && Date.now() - lastInteractionRef.current > idleTimeoutMs) {
         setIsIdle(true);
       }
     }, 10000);
@@ -218,7 +279,7 @@ export const DisplayPage: React.FC = () => {
       window.removeEventListener('touchstart', handleActivity);
       clearInterval(idleCheck);
     };
-  }, [isIdle]);
+  }, [isIdle, noSleep]);
 
   // Extract FortiGate live WAN Links (supports dynamic N links)
   const wanLinks = useMemo(() => {
@@ -811,8 +872,8 @@ export const DisplayPage: React.FC = () => {
     { name: 'Campus ERP System (Azure)', status: 'UP', latency: '28ms' },
   ];
 
-  // Display Idle Screen
-  if (isIdle) {
+  // Display Idle Screen (only active if No Sleep has been explicitly turned off)
+  if (isIdle && !noSleep) {
     return (
       <div className="min-h-screen w-full bg-black flex flex-col items-center justify-center p-4 sm:p-8 select-none">
         <div className="text-center space-y-4 max-w-2xl">
@@ -829,6 +890,29 @@ export const DisplayPage: React.FC = () => {
           <p className="text-slate-600 text-xs sm:text-sm mt-6">
             Press any key or move mouse to wake display. Critical events wake UI automatically.
           </p>
+          <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => {
+                setIsIdle(false);
+                lastInteractionRef.current = Date.now();
+              }}
+              className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-bold uppercase transition-all"
+            >
+              Wake Display
+            </button>
+            <button
+              onClick={() => {
+                setIsIdle(false);
+                setNoSleep(true);
+                localStorage.setItem('noc_no_sleep', 'true');
+                localStorage.setItem('noc_screensaver_disabled', 'true');
+                lastInteractionRef.current = Date.now();
+              }}
+              className="px-4 py-2 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase transition-all flex items-center gap-2"
+            >
+              <Coffee className="w-3.5 h-3.5 text-amber-400" /> Activate No Sleep (Default)
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -925,9 +1009,9 @@ export const DisplayPage: React.FC = () => {
       )}
 
       {/* TOP HEADER */}
-      <header className="min-h-16 border-b border-slate-800/90 px-3 sm:px-6 py-2 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2.5 sm:gap-3 bg-[#080d17] sticky top-0 z-30">
+      <header className="min-h-16 border-b border-slate-800/90 px-3 sm:px-5 py-2 flex flex-wrap 2xl:flex-nowrap items-center justify-between gap-2 sm:gap-3 bg-[#080d17] sticky top-0 z-30 w-full max-w-full">
         {/* Brand */}
-        <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-4 shrink-0 order-1">
           <img
             src="https://cdn.krea.edu.in/logo.png"
             alt="Krea Logo"
@@ -939,7 +1023,7 @@ export const DisplayPage: React.FC = () => {
           <div className="border-l border-slate-800 pl-2.5 sm:pl-3">
             <div className="flex items-center gap-2">
               <h1 className="text-sm sm:text-base font-black tracking-wide text-white">KREA IT OPERATIONS</h1>
-              <span className="hidden sm:inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              <span className="hidden xl:inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
                 NOC TV COMMAND CENTER
               </span>
             </div>
@@ -948,8 +1032,8 @@ export const DisplayPage: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
                 SYSTEMS OPERATIONAL
               </span>
-              <span className="hidden md:inline text-slate-600">•</span>
-              <span className="hidden md:inline text-slate-400 font-mono text-[10px]">
+              <span className="hidden 2xl:inline text-slate-600">•</span>
+              <span className="hidden 2xl:inline text-slate-400 font-mono text-[10px]">
                 OpManager 🟢 | Endpoint Central 🟢 | FortiGate 🟢
               </span>
             </div>
@@ -957,7 +1041,7 @@ export const DisplayPage: React.FC = () => {
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full scrollbar-none order-3 xl:order-2 shrink-0">
+        <div className="flex items-center justify-start sm:justify-center 2xl:justify-start gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full scrollbar-none order-3 2xl:order-2 w-full 2xl:w-auto shrink">
           {pages.map((p, idx) => (
             <button
               key={p}
@@ -985,21 +1069,50 @@ export const DisplayPage: React.FC = () => {
         </div>
 
         {/* Controls: Console Return, Theme, Sound, Clock */}
-        <div className="flex items-center gap-2 sm:gap-3 order-2 xl:order-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 order-2 2xl:order-3 shrink-0 ml-auto 2xl:ml-0">
           <button
             onClick={() => navigate('/noc')}
             title="Return to IT Operator Console"
-            className="px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5"
+            className="px-2 sm:px-2.5 py-1.5 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
           >
             <LayoutDashboard className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden sm:inline">Console</span>
+            <span className="hidden md:inline">Console</span>
           </button>
 
-          <ThemeToggle />
+          <div className="shrink-0">
+            <ThemeToggle />
+          </div>
+
+          {/* No Sleep (Stay Awake 24/7) Toggle — Default: Active */}
+          <button
+            onClick={toggleNoSleep}
+            title={
+              noSleep
+                ? 'No Sleep is ACTIVE (Default setting: display stays awake 24/7). Click to allow 30m idle screensaver.'
+                : 'Sleep mode allowed (display dims after 30m idle). Click to activate No Sleep 24/7.'
+            }
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[11px] sm:text-xs font-bold transition-all shrink-0 ${
+              noSleep
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-sm'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {noSleep ? (
+              <>
+                <Coffee className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline">NO SLEEP</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden md:inline">SLEEP (30M)</span>
+              </>
+            )}
+          </button>
 
           <button
             onClick={() => setSoundModalOpen(true)}
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[11px] sm:text-xs font-bold transition-all shrink-0 ${
               !isAudioUnlocked
                 ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 animate-pulse'
                 : isSoundActive
@@ -1010,26 +1123,28 @@ export const DisplayPage: React.FC = () => {
             {!isAudioUnlocked ? (
               <>
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">ENABLE SOUND</span>
+                <span className="hidden md:inline">ENABLE SOUND</span>
               </>
             ) : isSoundActive ? (
               <>
                 <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">SOUND ON</span>
+                <span className="hidden md:inline">SOUND ON</span>
               </>
             ) : (
               <>
                 <VolumeX className="w-3.5 h-3.5 text-slate-400" />
-                <span className="hidden sm:inline">SOUND OFF</span>
+                <span className="hidden md:inline">SOUND OFF</span>
               </>
             )}
           </button>
 
-          <div className="text-right border-l border-slate-800 pl-2.5 sm:pl-4">
-            <div className="font-mono text-base sm:text-xl font-black text-slate-100 tracking-wider">
+          <div className="text-right border-l border-slate-800 pl-2 sm:pl-3 shrink-0 whitespace-nowrap min-w-[85px] sm:min-w-[110px]">
+            <div className="font-mono text-sm sm:text-base md:text-lg xl:text-xl font-black text-slate-100 tracking-wider whitespace-nowrap">
               {timeStr}
             </div>
-            <div className="text-[9px] sm:text-[10px] text-slate-400 font-medium font-mono">{dateStr} IST</div>
+            <div className="text-[9px] sm:text-[10px] text-slate-400 font-medium font-mono whitespace-nowrap">
+              {dateStr} IST
+            </div>
           </div>
         </div>
       </header>

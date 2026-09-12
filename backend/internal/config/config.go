@@ -128,7 +128,7 @@ func Load(envPath string) (*Config, error) {
 		NOCAllowedOrigins:      splitAndTrim(getEnv("NOC_ALLOWED_ORIGINS", "https://erp.krea.edu.in,http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080")),
 		NOCEmbedAllowedOrigins: splitAndTrim(getEnv("NOC_EMBED_ALLOWED_ORIGINS", "https://erp.krea.edu.in,http://localhost:5173")),
 
-		MockMode: getEnvBool("MOCK_MODE", true),
+		MockMode: getEnvBool("MOCK_MODE", strings.ToLower(getEnv("APP_ENV", "production")) != "production"),
 	}
 
 	return cfg, nil
