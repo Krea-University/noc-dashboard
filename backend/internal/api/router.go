@@ -174,7 +174,8 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		api.Post("/api/endpoints/custom-groups", handleCreateCustomGroup(deps))
 		api.Delete("/api/endpoints/custom-groups/{id}", handleDeleteCustomGroup(deps))
 
-		// Biometrics Metadata Mutations
+		// Biometrics & Device Metadata Mutations
+		api.Put("/api/devices/{id}/notes", handleUpdateDeviceNotes(deps))
 		api.Put("/api/biometrics/{id}/metadata", handleUpdateBiometricMeta(deps))
 
 		// VLAN & Firewall Control Pipeline
@@ -904,20 +905,84 @@ func handleGetTopProblemDevices(deps *RouterDeps) http.HandlerFunc {
 func handleGetDeviceHistory(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		rows, err := deps.DB.Query("SELECT id, device_id, previous_status, new_status, duration_seconds, timestamp FROM device_history WHERE device_id = ? ORDER BY timestamp DESC LIMIT 50", id)
+		rows, err := deps.DB.Query(`
+			SELECT dh.id, dh.device_id, dh.previous_status, dh.new_status, dh.duration_seconds, dh.timestamp
+			FROM device_history dh
+			LEFT JOIN devices d ON dh.device_id = d.id
+			WHERE dh.device_id = ? OR d.name = ?
+			ORDER BY dh.timestamp DESC LIMIT 50`, id, id)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		defer rows.Close()
 
-		var history []models.DeviceHistory
+		history := make([]models.DeviceHistory, 0)
 		for rows.Next() {
 			var h models.DeviceHistory
 			_ = rows.Scan(&h.ID, &h.DeviceID, &h.PreviousStatus, &h.NewStatus, &h.DurationSeconds, &h.Timestamp)
 			history = append(history, h)
 		}
 		respondJSON(w, http.StatusOK, history)
+	}
+}
+
+func handleUpdateDeviceNotes(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		user := rbac.GetUserFromContext(r.Context())
+		actorName := "operator"
+		actorID := ""
+		if user != nil {
+			actorName = user.Username
+			actorID = user.ID
+		}
+
+		var req struct {
+			Notes string `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		now := time.Now().UTC()
+		cleanNotes := strings.TrimSpace(req.Notes)
+		meta := map[string]interface{}{
+			"notes":      cleanNotes,
+			"updated_by": actorName,
+			"updated_at": now.Format(time.RFC3339),
+		}
+		metaBytes, _ := json.Marshal(meta)
+
+		res, err := deps.DB.Exec("UPDATE devices SET metadata_json = ?, updated_at = ? WHERE id = ? OR name = ?", string(metaBytes), now, id, id)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed updating device notes: "+err.Error())
+			return
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			respondError(w, http.StatusNotFound, "device not found")
+			return
+		}
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:     actorID,
+			Username:   actorName,
+			Action:     "DEVICE_NOTE_UPDATED",
+			TargetType: "DEVICE",
+			TargetID:   id,
+			Reason:     fmt.Sprintf("Updated operational notes: %s", cleanNotes),
+			Result:     "SUCCESS",
+			IPAddress:  getClientIP(r),
+			UserAgent:  r.UserAgent(),
+		})
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status":        "updated",
+			"notes":         cleanNotes,
+			"metadata_json": string(metaBytes),
+		})
 	}
 }
 
@@ -3526,7 +3591,7 @@ func handleMockSimulation(deps *RouterDeps) http.HandlerFunc {
 
 func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Device, error) {
 	query := `
-	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, created_at, updated_at
+	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, metadata_json, created_at, updated_at
 	FROM devices`
 	if whereClause != "" {
 		query += " WHERE " + whereClause
@@ -3542,12 +3607,12 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 	var devices []models.Device
 	for rows.Next() {
 		var d models.Device
-		var mac, vendor, model *string
+		var mac, vendor, model, metaJSON *string
 		_ = rows.Scan(
 			&d.ID, &d.SourceID, &d.SourceSystem, &d.Name, &d.IPAddress, &mac,
 			&d.CategoryCode, &d.Type, &vendor, &model, &d.Status,
 			&d.AvailabilityPct, &d.ResponseTimeMS, &d.CPUPct, &d.MemPct, &d.DiskPct,
-			&d.LastSeenAt, &d.LastStatusChangeAt, &d.CreatedAt, &d.UpdatedAt,
+			&d.LastSeenAt, &d.LastStatusChangeAt, &metaJSON, &d.CreatedAt, &d.UpdatedAt,
 		)
 		if mac != nil {
 			d.MACAddress = *mac
@@ -3557,6 +3622,9 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 		}
 		if model != nil {
 			d.Model = *model
+		}
+		if metaJSON != nil {
+			d.MetadataJSON = *metaJSON
 		}
 
 		// Attach biometric metadata if category is BIOMETRIC
@@ -3599,17 +3667,17 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 
 func querySingleDevice(db *database.DB, id string) (*models.Device, error) {
 	query := `
-	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, created_at, updated_at
+	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, metadata_json, created_at, updated_at
 	FROM devices
 	WHERE id = ? OR name = ?`
 
 	var d models.Device
-	var mac, vendor, model *string
+	var mac, vendor, model, metaJSON *string
 	err := db.QueryRow(query, id, id).Scan(
 		&d.ID, &d.SourceID, &d.SourceSystem, &d.Name, &d.IPAddress, &mac,
 		&d.CategoryCode, &d.Type, &vendor, &model, &d.Status,
 		&d.AvailabilityPct, &d.ResponseTimeMS, &d.CPUPct, &d.MemPct, &d.DiskPct,
-		&d.LastSeenAt, &d.LastStatusChangeAt, &d.CreatedAt, &d.UpdatedAt,
+		&d.LastSeenAt, &d.LastStatusChangeAt, &metaJSON, &d.CreatedAt, &d.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -3622,6 +3690,9 @@ func querySingleDevice(db *database.DB, id string) (*models.Device, error) {
 	}
 	if model != nil {
 		d.Model = *model
+	}
+	if metaJSON != nil {
+		d.MetadataJSON = *metaJSON
 	}
 
 	// Biometric metadata lookup if applicable

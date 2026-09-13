@@ -74,7 +74,15 @@ export const api = {
     return request<Device[]>(`/devices?${params.toString()}`);
   },
   getDevice: (id: string) => request<Device>(`/devices/${id}`),
-  getDeviceHistory: (id: string) => request<DeviceHistory[]>(`/devices/${id}/history`),
+  getDeviceHistory: async (id: string) => {
+    const res = await request<DeviceHistory[]>(`/devices/${id}/history`);
+    return Array.isArray(res) ? res : [];
+  },
+  updateDeviceNotes: (id: string, notes: string) =>
+    request<{ status: string; notes: string; metadata_json: string }>(`/devices/${id}/notes`, {
+      method: 'PUT',
+      body: JSON.stringify({ notes }),
+    }),
   getTopProblemDevices: (limit?: number) => {
     const params = limit ? `?limit=${limit}` : '';
     return request<ProblemDevice[]>(`/devices/top-problems${params}`);

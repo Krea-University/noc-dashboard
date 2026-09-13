@@ -30,6 +30,34 @@ interface Props {
   onRefresh?: () => void;
 }
 
+const parseDeviceNotes = (dev: Device): { notes: string; updatedBy?: string; updatedAt?: string } => {
+  if (dev.metadata_json) {
+    try {
+      const parsed = JSON.parse(dev.metadata_json);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          notes: parsed.notes || '',
+          updatedBy: parsed.updated_by,
+          updatedAt: parsed.updated_at,
+        };
+      }
+      if (typeof dev.metadata_json === 'string') {
+        return { notes: dev.metadata_json };
+      }
+    } catch {
+      return { notes: dev.metadata_json };
+    }
+  }
+  if (dev.biometric_meta?.notes) {
+    return {
+      notes: dev.biometric_meta.notes,
+      updatedBy: dev.biometric_meta.contact_person || 'Biometric Admin',
+      updatedAt: dev.biometric_meta.updated_at,
+    };
+  }
+  return { notes: '' };
+};
+
 export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefresh }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'monitors' | 'alarms' | 'notes'>('overview');
   const [history, setHistory] = useState<DeviceHistory[]>([]);
@@ -43,9 +71,32 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
     notes: '',
   });
 
+  const [notesText, setNotesText] = useState('');
+  const [notesMeta, setNotesMeta] = useState<{ updatedBy?: string; updatedAt?: string }>({});
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [notesSaveMsg, setNotesSaveMsg] = useState<string | null>(null);
+
   useEffect(() => {
     if (device?.id) {
-      api.getDeviceHistory(device.id).then(setHistory).catch(console.error);
+      api.getDeviceHistory(device.id)
+        .then((data) => {
+          setHistory(Array.isArray(data) ? data : []);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch device history:', err);
+          setHistory([]);
+        });
+
+      const parsed = parseDeviceNotes(device);
+      setNotesText(parsed.notes || '');
+      setNotesMeta({
+        updatedBy: parsed.updatedBy,
+        updatedAt: parsed.updatedAt,
+      });
+      setIsEditingNotes(false);
+      setNotesSaveMsg(null);
+
       if (device.biometric_meta) {
         setBioForm({
           building: device.biometric_meta.building || '',
@@ -68,6 +119,59 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
       if (onRefresh) onRefresh();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!device) return;
+    setIsSavingNotes(true);
+    try {
+      await api.updateDeviceNotes(device.id, notesText);
+      if (device.category_code === 'BIOMETRIC' && device.biometric_meta) {
+        await api.updateBiometricMetadata(device.id, {
+          ...bioForm,
+          notes: notesText,
+        }).catch(console.error);
+      }
+      setNotesMeta({
+        updatedBy: 'Operator',
+        updatedAt: new Date().toISOString(),
+      });
+      setIsEditingNotes(false);
+      setNotesSaveMsg('Notes updated successfully');
+      setTimeout(() => setNotesSaveMsg(null), 3000);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      console.error('Failed to save device notes:', err);
+      alert('Failed to save notes: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return 'Instantaneous';
+    if (seconds < 60) return `${seconds}s`;
+    const mins = Math.floor(seconds / 60);
+    const remSecs = seconds % 60;
+    if (mins < 60) {
+      return remSecs > 0 ? `${mins}m ${remSecs}s` : `${mins}m`;
+    }
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hours}h ${remMins}m`;
+  };
+
+  const getStatusBadge = (st: string) => {
+    switch (st) {
+      case 'UP':
+        return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+      case 'DOWN':
+        return 'bg-red-500/15 text-red-400 border-red-500/30';
+      case 'WARNING':
+        return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+      default:
+        return 'bg-slate-500/15 text-slate-400 border-slate-500/30';
     }
   };
 
@@ -95,6 +199,8 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
       : device.status === 'DOWN'
       ? 'bg-red-500/15 text-red-400 border-red-500/40 animate-pulse'
       : 'bg-amber-500/15 text-amber-400 border-amber-500/40';
+
+  const safeHistory = Array.isArray(history) ? history : [];
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs flex justify-end">
@@ -437,33 +543,166 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
 
           {/* TAB 4: NOTES & HISTORY */}
           {activeTab === 'notes' && (
-            <div className="noc-card p-4 rounded-xl border-slate-800 space-y-3">
-              <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-4 h-4 text-blue-400" /> State Transition Log
-              </div>
-              {history.length === 0 ? (
-                <div className="text-xs text-slate-500 italic py-4">No recent state transitions recorded.</div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {history.map((h) => (
-                    <div key={h.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-900 text-xs">
-                      <div>
-                        <span className="font-semibold text-slate-300">
-                          {h.previous_status} → {h.new_status}
-                        </span>
-                        {h.duration_seconds > 0 && (
-                          <span className="text-slate-500 text-[11px] ml-2 font-mono">
-                            Duration: {h.duration_seconds}s
-                          </span>
+            <div className="space-y-4">
+              {/* Section 1: Operator & Maintenance Notes */}
+              <div className="noc-card p-4 rounded-xl border-slate-800 space-y-3 bg-slate-900/40">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-blue-400" /> Operator & Maintenance Notes
+                  </div>
+                  {!isEditingNotes ? (
+                    <button
+                      onClick={() => setIsEditingNotes(true)}
+                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1.5 text-xs font-medium transition-colors"
+                    >
+                      <Edit2 className="w-3 h-3" /> Edit Notes
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const parsed = parseDeviceNotes(device);
+                          setNotesText(parsed.notes || '');
+                          setIsEditingNotes(false);
+                        }}
+                        disabled={isSavingNotes}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveNotes}
+                        disabled={isSavingNotes}
+                        className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        {isSavingNotes ? (
+                          <span>Saving...</span>
+                        ) : (
+                          <>
+                            <Check className="w-3 h-3" /> Save
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {notesSaveMsg && (
+                  <div className="p-2 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>{notesSaveMsg}</span>
+                  </div>
+                )}
+
+                {isEditingNotes ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={notesText}
+                      onChange={(e) => setNotesText(e.target.value)}
+                      placeholder="Enter physical rack position, switch uplink port, maintenance instructions, or vendor contract details..."
+                      rows={4}
+                      className="w-full p-3 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono transition-colors"
+                    />
+                    <div className="text-[11px] text-slate-500 italic">
+                      Notes are recorded in the central audit trail with your operator username and timestamp.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-slate-900/80 border border-slate-800/80 p-3 text-xs">
+                    {notesText.trim() ? (
+                      <div className="space-y-2">
+                        <p className="text-slate-200 whitespace-pre-wrap leading-relaxed">{notesText}</p>
+                        {(notesMeta.updatedBy || notesMeta.updatedAt) && (
+                          <div className="pt-2 border-t border-slate-800/60 text-[11px] text-slate-500 flex flex-wrap items-center gap-2">
+                            {notesMeta.updatedBy && (
+                              <span>
+                                Updated by <strong className="text-slate-400">{notesMeta.updatedBy}</strong>
+                              </span>
+                            )}
+                            {notesMeta.updatedBy && notesMeta.updatedAt && <span>•</span>}
+                            {notesMeta.updatedAt && (
+                              <span>{new Date(notesMeta.updatedAt).toLocaleString()}</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {new Date(h.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                  ))}
+                    ) : (
+                      <div className="text-center py-4 space-y-2">
+                        <p className="text-slate-500 italic">
+                          No operational notes recorded yet for this device.
+                        </p>
+                        <button
+                          onClick={() => setIsEditingNotes(true)}
+                          className="text-xs text-blue-400 hover:text-blue-300 font-semibold underline underline-offset-2"
+                        >
+                          + Add Maintenance Note
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: State Transition Log */}
+              <div className="noc-card p-4 rounded-xl border-slate-800 space-y-3 bg-slate-900/40">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-blue-400" /> State Transition Log
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    {safeHistory.length} event{safeHistory.length === 1 ? '' : 's'}
+                  </span>
                 </div>
-              )}
+
+                {safeHistory.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                    <div className="flex justify-center">
+                      <div className="p-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                    </div>
+                    <div className="text-xs font-bold text-slate-200">Continuous Optimal Uptime</div>
+                    <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                      No downtime or unexpected state transitions logged for this device. Live polling probes show normal operating status.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {safeHistory.map((h) => (
+                      <div
+                        key={h.id}
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${getStatusBadge(
+                              h.previous_status
+                            )}`}
+                          >
+                            {h.previous_status}
+                          </span>
+                          <span className="text-slate-500 text-xs">→</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase border ${getStatusBadge(
+                              h.new_status
+                            )}`}
+                          >
+                            {h.new_status}
+                          </span>
+                          {h.duration_seconds > 0 && (
+                            <span className="text-slate-400 text-[11px] ml-1 font-mono">
+                              ({formatDuration(h.duration_seconds)})
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {new Date(h.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
