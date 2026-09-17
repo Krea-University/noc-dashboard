@@ -48,6 +48,123 @@ declare global {
   }
 }
 
+interface GoogleSignInButtonProps {
+  clientId: string;
+  onCredential: (credential: string) => void;
+  onError: (error: string) => void;
+  isLoading: boolean;
+}
+
+const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
+  clientId,
+  onCredential,
+  onError,
+  isLoading,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isRendered, setIsRendered] = useState(false);
+
+  useEffect(() => {
+    if (!clientId) return;
+
+    // Dynamically inject Google Identity Services script if not already present
+    if (!document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+
+    let active = true;
+
+    const render = () => {
+      if (!active || !containerRef.current || !window.google?.accounts?.id) return;
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response: { credential: string }) => {
+            if (response.credential) {
+              onCredential(response.credential);
+            } else {
+              onError('Google authentication failed. No valid credential received.');
+            }
+          },
+          auto_select: false,
+        });
+
+        // Compute available container width up to 400px (Google GIS max width)
+        const parentWidth = containerRef.current.parentElement?.clientWidth;
+        const selfWidth = containerRef.current.clientWidth;
+        const measuredWidth = parentWidth || selfWidth || 384;
+        const targetWidth = Math.min(400, Math.max(200, Math.floor(measuredWidth)));
+
+        containerRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(containerRef.current, {
+          theme: 'outline',
+          size: 'large',
+          shape: 'rectangular',
+          text: 'continue_with',
+          logo_alignment: 'left',
+          width: targetWidth,
+        });
+        setIsRendered(true);
+      } catch (err) {
+        console.error('Failed to render Google Sign-In button:', err);
+      }
+    };
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (window.google?.accounts?.id && containerRef.current) {
+        clearInterval(interval);
+        render();
+      }
+      if (attempts > 40) {
+        clearInterval(interval);
+      }
+    }, 100);
+
+    const handleResize = () => {
+      if (window.google?.accounts?.id && containerRef.current) {
+        render();
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [clientId, onCredential, onError]);
+
+  return (
+    <div className="w-full flex flex-col items-center">
+      {/* Explicit colorScheme: light wrapper suppresses browser's dark-mode iframe canvas artifact */}
+      <div
+        className={`w-full flex justify-center items-center rounded-lg transition-all duration-200 ${
+          isLoading ? 'opacity-50 pointer-events-none' : 'opacity-100'
+        }`}
+        style={{ colorScheme: 'light' }}
+      >
+        <div
+          ref={containerRef}
+          className="w-full flex justify-center items-center min-h-[44px]"
+        />
+      </div>
+
+      {(!isRendered || isLoading) && (
+        <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-400 text-xs w-full mt-1.5 animate-pulse">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+          <span>{isLoading ? 'Signing in with Google...' : 'Connecting to Google Single Sign-On...'}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -58,12 +175,10 @@ export const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [googleBtnReady, setGoogleBtnReady] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
 
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
-  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   // Safely parse redirect query parameter (disallowing protocol-relative URLs)
   const rawRedirect = searchParams.get('redirect');
@@ -133,11 +248,11 @@ export const LoginPage: React.FC = () => {
   }, [authConfig?.turnstile_site_key]);
 
   // Handle Google OAuth Credential
-  const handleGoogleCredentialResponse = async (response: { credential: string }) => {
+  const handleGoogleCredentialResponse = async (credential: string) => {
     setErrorMsg('');
     setIsGoogleLoading(true);
     try {
-      await api.loginWithGoogle(response.credential);
+      await api.loginWithGoogle(credential);
       await queryClient.invalidateQueries({ queryKey: ['me'] });
       navigate(redirectTarget, { replace: true });
     } catch (err: unknown) {
@@ -150,53 +265,6 @@ export const LoginPage: React.FC = () => {
       setIsGoogleLoading(false);
     }
   };
-
-  // Initialize Google Identity Services (GIS) button
-  useEffect(() => {
-    const clientId = authConfig?.google_client_id;
-    if (!clientId) return;
-
-    // Ensure GIS script is present in document
-    if (!document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-    }
-
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      if (window.google?.accounts?.id && googleBtnRef.current) {
-        clearInterval(interval);
-        try {
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: handleGoogleCredentialResponse,
-            auto_select: false,
-          });
-          googleBtnRef.current.innerHTML = '';
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            theme: 'filled_black',
-            size: 'large',
-            shape: 'rectangular',
-            text: 'continue_with',
-            logo_alignment: 'left',
-            width: Math.min(360, Math.max(240, googleBtnRef.current.clientWidth || 320)),
-          });
-          setGoogleBtnReady(true);
-        } catch (e) {
-          console.error('GIS renderButton failed:', e);
-        }
-      }
-      if (attempts > 30) {
-        clearInterval(interval);
-      }
-    }, 150);
-
-    return () => clearInterval(interval);
-  }, [authConfig?.google_client_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,48 +357,28 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Google Single Sign-On Button */}
-            <div className="flex justify-center w-full min-h-[44px] pt-1">
-              {isGoogleLoading ? (
-                <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs w-full">
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                  <span>Signing in with Google...</span>
-                </div>
-              ) : (
-                <div className="w-full flex flex-col items-center">
-                  <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]" />
-                  {!googleBtnReady && (
-                    <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-400 text-xs w-full animate-pulse">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                      <span>Loading Google Sign-In...</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            {authConfig?.google_client_id && (
+              <div className="pt-2">
+                <GoogleSignInButton
+                  clientId={authConfig.google_client_id}
+                  onCredential={handleGoogleCredentialResponse}
+                  onError={(err) => setErrorMsg(err)}
+                  isLoading={isGoogleLoading}
+                />
+              </div>
+            )}
           </div>
         ) : (
           <>
             {/* Google Single Sign-On Section */}
             {authConfig?.google_client_id ? (
               <div className="space-y-3">
-                <div className="flex justify-center w-full min-h-[44px]">
-                  {isGoogleLoading ? (
-                    <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs w-full">
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                      <span>Signing in with Google...</span>
-                    </div>
-                  ) : (
-                    <div className="w-full flex flex-col items-center">
-                      <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]" />
-                      {!googleBtnReady && (
-                        <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-400 text-xs w-full animate-pulse">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                          <span>Loading Google Sign-In...</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <GoogleSignInButton
+                  clientId={authConfig.google_client_id}
+                  onCredential={handleGoogleCredentialResponse}
+                  onError={(err) => setErrorMsg(err)}
+                  isLoading={isGoogleLoading}
+                />
 
                 <div className="relative my-3">
                   <div className="absolute inset-0 flex items-center">
