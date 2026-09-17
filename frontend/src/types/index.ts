@@ -453,3 +453,61 @@ export interface AvailabilityReport {
   top_problem_devices: ProblemDevice[];
 }
 
+export interface SyncDeviceItem {
+  id: string;
+  source_id: string;
+  source_system: string;
+  name: string;
+  ip_address: string;
+  category_code: string;
+  type: string;
+  vendor: string;
+  model: string;
+  status: string;
+  reason?: string;
+  diff_fields?: string[];
+}
+
+export interface SyncPreviewResult {
+  generated_at: string;
+  upstream_summary: {
+    opmanager_devices: number;
+    endpoint_computers: number;
+    fortigate_vlans: number;
+  };
+  local_summary: {
+    total_devices: number;
+    total_endpoints: number;
+    total_vlans: number;
+  };
+  to_add: SyncDeviceItem[];
+  to_update: SyncDeviceItem[];
+  to_remove: SyncDeviceItem[];
+  counts: {
+    add_count: number;
+    update_count: number;
+    remove_count: number;
+  };
+}
+
+export interface SyncExecuteRequest {
+  remove_mode: 'decommission' | 'purge';
+  selected_add_ids?: string[];
+  selected_remove_ids?: string[];
+  reason: string;
+}
+
+export interface SyncExecuteResult {
+  job_id: string;
+  started_at: string;
+  completed_at: string;
+  duration_ms: number;
+  status: string;
+  added_count: number;
+  updated_count: number;
+  removed_count: number;
+  remove_mode: string;
+  audit_log_id?: string;
+  message: string;
+}
+

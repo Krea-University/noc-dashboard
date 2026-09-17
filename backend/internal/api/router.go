@@ -38,6 +38,7 @@ type RouterDeps struct {
 	AuditSvc     *audit.Service
 	DisplaysSvc  *displays.Service
 	VlanPipeline *automation.Pipeline
+	SyncEngine   *automation.SyncReconciliationEngine
 	SoundEngine  *sound.Engine
 	WSHub        *websocket.Hub
 	NMSProvider  integrations.NMSProvider
@@ -181,6 +182,10 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		// VLAN & Firewall Control Pipeline
 		api.Get("/api/vlans", handleListVLANs(deps))
 		api.Post("/api/vlans/sync", handleSyncVLANsFromFirewall(deps))
+
+		// Infrastructure Full Sync & Reconciliation
+		api.Get("/api/infrastructure/sync/preview", handleInfrastructureSyncPreview(deps))
+		api.Post("/api/infrastructure/sync/execute", handleInfrastructureSyncExecute(deps))
 		api.Get("/api/vlans/{id}", handleGetVLAN(deps))
 		api.Get("/api/vlans/{id}/impact", handleGetVLANImpact(deps))
 		api.Post("/api/vlans/{id}/internet/disable", handleDisableVlanInternet(deps))
@@ -1719,6 +1724,51 @@ func handleSyncVLANsFromFirewall(deps *RouterDeps) http.HandlerFunc {
 			"synced_count": syncedCount,
 			"vlans":        updatedVlans,
 		})
+	}
+}
+
+func getSyncEngine(deps *RouterDeps) *automation.SyncReconciliationEngine {
+	if deps.SyncEngine != nil {
+		return deps.SyncEngine
+	}
+	return automation.NewSyncReconciliationEngine(deps.DB, deps.NMSProvider, deps.EPCProvider, deps.FGProvider, deps.AuditSvc, deps.WSHub)
+}
+
+func handleInfrastructureSyncPreview(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		engine := getSyncEngine(deps)
+		preview, err := engine.PreviewSync(r.Context())
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed generating sync preview: %v", err))
+			return
+		}
+		respondJSON(w, http.StatusOK, preview)
+	}
+}
+
+func handleInfrastructureSyncExecute(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req automation.SyncExecuteRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request payload")
+			return
+		}
+
+		user := rbac.GetUserFromContext(r.Context())
+		username := "system"
+		userID := ""
+		if user != nil {
+			username = user.Username
+			userID = user.ID
+		}
+
+		engine := getSyncEngine(deps)
+		result, err := engine.ExecuteSync(r.Context(), &req, username, userID, r.RemoteAddr, r.UserAgent())
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed executing infrastructure sync: %v", err))
+			return
+		}
+		respondJSON(w, http.StatusOK, result)
 	}
 }
 

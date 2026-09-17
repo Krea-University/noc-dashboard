@@ -15,6 +15,7 @@ import {
   Users,
   Building2,
   X,
+  RefreshCw,
 } from 'lucide-react';
 
 interface Props {
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<Props> = ({
     { label: 'Endpoints', to: '/noc/endpoints', icon: Laptop },
     { label: 'Biometric Devices', to: '/noc/biometrics', icon: Fingerprint },
     { label: 'VLAN Manager', to: '/noc/vlan', icon: Layers },
+    { label: 'Full Infra Sync', to: '/noc/sync', icon: RefreshCw },
     {
       label: 'Alarms',
       to: '/noc/alarms',

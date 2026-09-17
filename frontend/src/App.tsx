@@ -19,6 +19,7 @@ import { ReportsPage } from './pages/noc/ReportsPage';
 import { AuditPage } from './pages/noc/AuditPage';
 import { UsersPage } from './pages/noc/UsersPage';
 import { SettingsPage } from './pages/noc/SettingsPage';
+import { SyncPage } from './pages/noc/SyncPage';
 import { AuthGuard } from './components/auth/AuthGuard';
 
 export function App() {
@@ -61,6 +62,7 @@ export function App() {
         <Route path="incidents" element={<IncidentsPage />} />
         <Route path="vlan" element={<VlanControlPage />} />
         <Route path="firewall" element={<FirewallPage />} />
+        <Route path="sync" element={<SyncPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="users" element={<UsersPage />} />

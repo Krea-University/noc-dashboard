@@ -2,7 +2,7 @@ import {
   User, Role, Device, DeviceHistory, Endpoint, CustomGroup, Alarm, Incident,
   VLAN, ActionJob, ImpactEstimate, AuditLog, SoundProfile,
   DisplayDevice, DashboardSummary, ProblemDevice, AvailabilityReport,
-  VlanLogsReportResponse,
+  VlanLogsReportResponse, SyncPreviewResult, SyncExecuteRequest, SyncExecuteResult,
 } from '../types';
 
 const API_BASE = '/api';
@@ -169,6 +169,14 @@ export const api = {
     request<ActionJob>(`/actions/${id}/rollback`, {
       method: 'POST',
       body: JSON.stringify({ password }),
+    }),
+
+  // Infrastructure Full Sync & Reconciliation
+  getSyncPreview: () => request<SyncPreviewResult>('/infrastructure/sync/preview'),
+  executeSync: (req: SyncExecuteRequest) =>
+    request<SyncExecuteResult>('/infrastructure/sync/execute', {
+      method: 'POST',
+      body: JSON.stringify(req),
     }),
 
   // Audit & Reports

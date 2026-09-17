@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, AlertTriangle, Search, User as UserIcon, LogOut, RefreshCw, Radio, Tv, Menu, Users, Shield } from 'lucide-react';
+import { Volume2, VolumeX, AlertTriangle, Search, User as UserIcon, LogOut, RefreshCw, Radio, Tv, Menu, Users, Shield, Settings } from 'lucide-react';
 import { soundManager } from '../../sound/SoundManager';
 import { SoundUnlockModal } from '../common/SoundUnlockModal';
 import { ThemeToggle } from '../common/ThemeToggle';
@@ -196,13 +196,23 @@ export const OperatorHeader: React.FC<Props> = ({
         {/* Theme Toggle (Light/Dark) */}
         <ThemeToggle />
 
+        {/* Full Infrastructure Sync Quick Action */}
+        <button
+          onClick={() => navigate('/noc/sync')}
+          title="Full Infrastructure Sync & Reconciliation"
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/20 hover:text-blue-200 transition-colors cursor-pointer"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span className="hidden md:inline">Full Sync</span>
+        </button>
+
         {/* Settings Navigation */}
         <button
           onClick={() => navigate('/noc/settings')}
           title="Administration Settings"
-          className="hidden sm:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors"
+          className="hidden sm:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer"
         >
-          <RefreshCw className="w-4 h-4" />
+          <Settings className="w-4 h-4" />
         </button>
 
         {/* User Initials Avatar & Menu */}
@@ -238,9 +248,20 @@ export const OperatorHeader: React.FC<Props> = ({
                   type="button"
                   onClick={() => {
                     setUserMenuOpen(false);
+                    navigate('/noc/sync');
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Full Infra Sync</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
                     navigate('/noc/users');
                   }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition-colors"
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <Users className="w-3.5 h-3.5 text-slate-400" />
                   <span>User Management</span>
@@ -251,9 +272,9 @@ export const OperatorHeader: React.FC<Props> = ({
                     setUserMenuOpen(false);
                     navigate('/noc/settings');
                   }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition-colors"
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                  <Settings className="w-3.5 h-3.5 text-slate-400" />
                   <span>System Settings</span>
                 </button>
               </div>

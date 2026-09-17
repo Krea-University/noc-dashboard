@@ -122,6 +122,7 @@ func main() {
 
 	// 6. Automation Pipeline
 	vlanPipeline := automation.NewPipeline(db, fg, auditSvc, wsHub)
+	syncEngine := automation.NewSyncReconciliationEngine(db, nms, epc, fg, auditSvc, wsHub)
 
 	// 7. Background Collectors
 	collectorManager := collectors.NewManager(cfg, db, eventsEngine, nms, epc, fg)
@@ -136,6 +137,7 @@ func main() {
 		AuditSvc:     auditSvc,
 		DisplaysSvc:  displaysSvc,
 		VlanPipeline: vlanPipeline,
+		SyncEngine:   syncEngine,
 		SoundEngine:  soundEngine,
 		WSHub:        wsHub,
 		NMSProvider:  nms,
