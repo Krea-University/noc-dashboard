@@ -276,17 +276,70 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
+func isPasswordLoginEnabled(deps *RouterDeps) bool {
+	// 1. Check database settings table for runtime admin policy toggle
+	if deps.DB != nil {
+		var val string
+		err := deps.DB.QueryRow("SELECT setting_value FROM system_settings WHERE setting_key = 'auth_password_login_enabled'").Scan(&val)
+		if err == nil {
+			val = strings.ToLower(strings.TrimSpace(val))
+			if val == "false" || val == "0" || val == "disabled" || val == "no" {
+				return false
+			}
+			if val == "true" || val == "1" || val == "enabled" || val == "yes" {
+				return true
+			}
+		}
+
+		var mode string
+		err = deps.DB.QueryRow("SELECT setting_value FROM system_settings WHERE setting_key = 'auth_mode'").Scan(&mode)
+		if err == nil {
+			if strings.ToLower(strings.TrimSpace(mode)) == "google_only" {
+				return false
+			}
+		}
+	}
+
+	// 2. Fallback to Config / Environment Variable (.env)
+	if deps.Cfg != nil {
+		if deps.Cfg.AuthGoogleOnly {
+			return false
+		}
+		return deps.Cfg.AuthPasswordLoginEnabled
+	}
+
+	return true
+}
+
 func handleAuthConfig(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		passEnabled := isPasswordLoginEnabled(deps)
 		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"turnstile_site_key": deps.Cfg.TurnstileSiteKey,
-			"google_client_id":   deps.Cfg.GoogleClientID,
+			"turnstile_site_key":     deps.Cfg.TurnstileSiteKey,
+			"google_client_id":       deps.Cfg.GoogleClientID,
+			"password_login_enabled": passEnabled,
+			"google_only":            !passEnabled,
 		})
 	}
 }
 
 func handleLogin(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ip := getClientIP(r)
+		ua := r.UserAgent()
+
+		if !isPasswordLoginEnabled(deps) {
+			_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+				Action:    "USER_LOGIN_BLOCKED",
+				IPAddress: ip,
+				UserAgent: ua,
+				Result:    "FAILED",
+				Reason:    "Password login is disabled; Google Sign-In is required",
+			})
+			respondError(w, http.StatusForbidden, "Password login is disabled. Please sign in with your institutional Google account.")
+			return
+		}
+
 		var req struct {
 			Username            string `json:"username"`
 			Password            string `json:"password"`
@@ -302,9 +355,6 @@ func handleLogin(deps *RouterDeps) http.HandlerFunc {
 		if turnstileToken == "" {
 			turnstileToken = strings.TrimSpace(req.CFTurnstileResponse)
 		}
-
-		ip := getClientIP(r)
-		ua := r.UserAgent()
 
 		// Verify Cloudflare Turnstile if configured
 		if deps.Cfg.TurnstileSecretKey != "" {
@@ -3506,13 +3556,30 @@ func handleUpdateSettings(deps *RouterDeps) http.HandlerFunc {
 
 		now := time.Now().UTC()
 		for k, v := range req {
-			_, _ = deps.DB.Exec("UPDATE system_settings SET setting_value = ?, updated_at = ? WHERE setting_key = ?", v, now, k)
+			res, err := deps.DB.Exec("UPDATE system_settings SET setting_value = ?, updated_at = ? WHERE setting_key = ?", v, now, k)
+			if err == nil {
+				aff, _ := res.RowsAffected()
+				if aff == 0 {
+					var exists int
+					_ = deps.DB.QueryRow("SELECT COUNT(*) FROM system_settings WHERE setting_key = ?", k).Scan(&exists)
+					if exists == 0 {
+						newID := "set_" + uuid.New().String()[:8]
+						_, _ = deps.DB.Exec("INSERT INTO system_settings (id, setting_key, setting_value, description, updated_at) VALUES (?, ?, ?, ?, ?)", newID, k, v, "System Configuration", now)
+					}
+				}
+			}
 		}
 
 		currentUser := rbac.GetUserFromContext(r.Context())
+		userID := ""
+		username := "system"
+		if currentUser != nil {
+			userID = currentUser.ID
+			username = currentUser.Username
+		}
 		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
-			UserID:    currentUser.ID,
-			Username:  currentUser.Username,
+			UserID:    userID,
+			Username:  username,
 			Action:    "SETTINGS_CHANGED",
 			Reason:    "Admin updated system settings",
 			Result:    "SUCCESS",

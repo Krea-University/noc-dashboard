@@ -1,21 +1,63 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette, Users } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette, Users, Lock, KeyRound, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { SoundProfile } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
 
 export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const [simulationMsg, setSimulationMsg] = useState('');
   const [simLoading, setSimLoading] = useState(false);
+  const [authSaving, setAuthSaving] = useState(false);
+  const [authMsg, setAuthMsg] = useState('');
 
   const { data: settings, refetch: refetchSettings } = useQuery({
     queryKey: ['system-settings'],
     queryFn: api.getSettings,
   });
+
+  const isGoogleOnly =
+    settings?.auth_mode === 'google_only' ||
+    settings?.auth_password_login_enabled === 'false';
+
+  const [selectedAuthMode, setSelectedAuthMode] = useState<'all' | 'google_only'>('all');
+
+  React.useEffect(() => {
+    if (settings) {
+      const gOnly =
+        settings.auth_mode === 'google_only' ||
+        settings.auth_password_login_enabled === 'false';
+      setSelectedAuthMode(gOnly ? 'google_only' : 'all');
+    }
+  }, [settings]);
+
+  const handleSaveAuthPolicy = async (mode: 'all' | 'google_only') => {
+    setAuthSaving(true);
+    setAuthMsg('');
+    try {
+      await api.updateSettings({
+        auth_mode: mode,
+        auth_password_login_enabled: mode === 'all' ? 'true' : 'false',
+      });
+      setSelectedAuthMode(mode);
+      await refetchSettings();
+      await queryClient.invalidateQueries({ queryKey: ['auth-config'] });
+      setAuthMsg(
+        mode === 'google_only'
+          ? 'Google SSO Only policy enforced! Password login is now disabled.'
+          : 'Dual login policy applied! Password login and Google SSO are both active.'
+      );
+      setTimeout(() => setAuthMsg(''), 6000);
+    } catch (err: unknown) {
+      if (err instanceof Error) setAuthMsg(err.message);
+    } finally {
+      setAuthSaving(false);
+    }
+  };
 
   const { data: profiles, refetch: refetchProfiles } = useQuery({
     queryKey: ['sound-profiles'],
@@ -133,11 +175,96 @@ export const SettingsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/noc/users')}
-            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 self-start sm:self-auto transition-colors shadow-sm"
+            className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 self-start sm:self-auto transition-colors shadow-sm cursor-pointer"
           >
             <Users className="w-4 h-4" /> Manage User Accounts
           </button>
         </div>
+      </div>
+
+      {/* Authentication Policy & Google SSO Enforcement */}
+      <div className="noc-card p-4 sm:p-5 space-y-4 border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Authentication Policy & Sign-In Mode
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Control sign-in methods for the command center. You can allow standard password login or enforce Google Single Sign-On (@krea.edu.in) exclusively.
+            </p>
+          </div>
+          {authMsg && (
+            <span className="px-3 py-1 text-xs font-mono font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse self-start sm:self-auto">
+              {authMsg}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+          {/* Option 1: Dual Login */}
+          <div
+            onClick={() => handleSaveAuthPolicy('all')}
+            className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+              selectedAuthMode === 'all'
+                ? 'bg-slate-900 border-blue-500 ring-2 ring-blue-500/30 shadow-lg'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-75'
+            }`}
+          >
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-blue-400 shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-100">Dual Mode (Google SSO + Password)</span>
+                {selectedAuthMode === 'all' && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-500/20 text-blue-300">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Operators can sign in using either their verified institutional Google account or standard operator username and password with Cloudflare Turnstile protection.
+              </p>
+            </div>
+          </div>
+
+          {/* Option 2: Google SSO Only */}
+          <div
+            onClick={() => handleSaveAuthPolicy('google_only')}
+            className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+              selectedAuthMode === 'google_only'
+                ? 'bg-slate-900 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg'
+                : 'bg-slate-950/60 border-slate-800 hover:border-slate-700 opacity-75'
+            }`}
+          >
+            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-emerald-400 shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-slate-100">Google SSO Only (Password Disabled)</span>
+                {selectedAuthMode === 'google_only' && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-300">
+                    Active
+                  </span>
+                )}
+                <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                  Recommended
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Disables username and password login across all endpoints. Only verified @krea.edu.in institutional Google Workspace accounts can authenticate.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {authSaving && (
+          <div className="flex items-center gap-2 text-xs text-blue-400 font-semibold pt-1">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span>Updating authentication policy in database...</span>
+          </div>
+        )}
       </div>
 
       {/* Interactive NOC Outage Simulation Suite (Section 61) */}

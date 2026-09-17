@@ -34,7 +34,12 @@ async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Auth
   getAuthConfig: () =>
-    request<{ turnstile_site_key: string; google_client_id: string }>('/auth/config'),
+    request<{
+      turnstile_site_key: string;
+      google_client_id: string;
+      password_login_enabled: boolean;
+      google_only: boolean;
+    }>('/auth/config'),
   login: (username: string, password: string, turnstileToken?: string) =>
     request<{ user: User; token: string }>('/auth/login', {
       method: 'POST',

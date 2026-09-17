@@ -79,6 +79,10 @@ type Config struct {
 	// Google Identity Services (GIS) Sign-In
 	GoogleClientID string
 
+	// Auth Policy
+	AuthPasswordLoginEnabled bool
+	AuthGoogleOnly           bool
+
 	// Mode
 	MockMode         bool
 	PurgeSeedOnStart bool
@@ -87,6 +91,12 @@ type Config struct {
 // Load loads configuration from an optional .env file and environment variables.
 func Load(envPath string) (*Config, error) {
 	loadDotEnv(envPath)
+
+	authPassEnabled := getEnvBool("AUTH_PASSWORD_LOGIN_ENABLED", true)
+	authGoogleOnly := getEnvBool("AUTH_GOOGLE_ONLY", false)
+	if authGoogleOnly {
+		authPassEnabled = false
+	}
 
 	cfg := &Config{
 		AppName:    getEnv("APP_NAME", "KREA IT NOC"),
@@ -142,6 +152,9 @@ func Load(envPath string) (*Config, error) {
 		TurnstileHostnames: splitAndTrim(getEnv("TURNSTILE_HOSTNAMES", "")),
 
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
+
+		AuthPasswordLoginEnabled: authPassEnabled,
+		AuthGoogleOnly:           authGoogleOnly,
 
 		MockMode:         getEnvBool("MOCK_MODE", strings.ToLower(getEnv("APP_ENV", "production")) != "production"),
 		PurgeSeedOnStart: getEnvBool("PURGE_SEED_ON_START", false),
