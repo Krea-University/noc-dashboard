@@ -61,5 +61,5 @@ networks:
 
 volumes:
   noc_db_data:
-    name: krea_noc_db_data
+    name: noc_anti_noc_db_data
     driver: local

@@ -58,6 +58,7 @@ export const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleBtnReady, setGoogleBtnReady] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
 
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
@@ -83,7 +84,8 @@ export const LoginPage: React.FC = () => {
   const { data: authConfig } = useQuery({
     queryKey: ['auth-config'],
     queryFn: api.getAuthConfig,
-    staleTime: Infinity,
+    staleTime: 30000,
+    retry: 2,
   });
 
   useEffect(() => {
@@ -150,7 +152,18 @@ export const LoginPage: React.FC = () => {
     const clientId = authConfig?.google_client_id;
     if (!clientId) return;
 
+    // Ensure GIS script is present in document
+    if (!document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+
+    let attempts = 0;
     const interval = setInterval(() => {
+      attempts++;
       if (window.google?.accounts?.id && googleBtnRef.current) {
         clearInterval(interval);
         try {
@@ -166,13 +179,17 @@ export const LoginPage: React.FC = () => {
             shape: 'rectangular',
             text: 'continue_with',
             logo_alignment: 'left',
-            width: 360,
+            width: Math.min(360, Math.max(240, googleBtnRef.current.clientWidth || 320)),
           });
-        } catch {
-          // Ignore if already initialized
+          setGoogleBtnReady(true);
+        } catch (e) {
+          console.error('GIS renderButton failed:', e);
         }
       }
-    }, 250);
+      if (attempts > 30) {
+        clearInterval(interval);
+      }
+    }, 150);
 
     return () => clearInterval(interval);
   }, [authConfig?.google_client_id]);
@@ -264,7 +281,15 @@ export const LoginPage: React.FC = () => {
                   <span>Signing in with Google...</span>
                 </div>
               ) : (
-                <div ref={googleBtnRef} className="w-full flex justify-center" />
+                <div className="w-full flex flex-col items-center">
+                  <div ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]" />
+                  {!googleBtnReady && (
+                    <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-900/60 border border-slate-800/80 text-slate-400 text-xs w-full animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                      <span>Loading Google Sign-In...</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
