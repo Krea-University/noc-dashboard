@@ -80,7 +80,8 @@ type Config struct {
 	GoogleClientID string
 
 	// Mode
-	MockMode bool
+	MockMode         bool
+	PurgeSeedOnStart bool
 }
 
 // Load loads configuration from an optional .env file and environment variables.
@@ -142,7 +143,8 @@ func Load(envPath string) (*Config, error) {
 
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 
-		MockMode: getEnvBool("MOCK_MODE", strings.ToLower(getEnv("APP_ENV", "production")) != "production"),
+		MockMode:         getEnvBool("MOCK_MODE", strings.ToLower(getEnv("APP_ENV", "production")) != "production"),
+		PurgeSeedOnStart: getEnvBool("PURGE_SEED_ON_START", false),
 	}
 
 	return cfg, nil

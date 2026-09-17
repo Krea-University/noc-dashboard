@@ -4,6 +4,8 @@ services:
     image: mariadb:11
     container_name: krea-noc-db
     restart: always
+    env_file:
+      - .env
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-noc_secure_pass}
       MYSQL_DATABASE: ${DB_NAME:-krea_noc}
@@ -59,4 +61,5 @@ networks:
 
 volumes:
   noc_db_data:
+    name: krea_noc_db_data
     driver: local
