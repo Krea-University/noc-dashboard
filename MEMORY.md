@@ -240,6 +240,9 @@ go test ./...
 ### Cloudflare Turnstile Integration (Canonical Existing-Widget Flow)
 - **Site Key**: `0x4AAAAAAExldpVxn_Cfx4o7`
 - **Secret Key**: `0x4AAAAAAExldgkxpZiriTiET5EUmmzQmQg` (configured in `.env`)
+- **Allowed Hostnames**: `TURNSTILE_HOSTNAMES=sc-noc.krea.edu.in,localhost,127.0.0.1,*.krea.edu.in`
+  - Backend `IsHostnameAllowed` supports exact match, wildcard prefix (`*.krea.edu.in`), dot prefix (`.krea.edu.in`), and universal wildcard (`*`).
+  - `config.go` automatically ensures `sc-noc.krea.edu.in`, `*.krea.edu.in`, `localhost`, `127.0.0.1`, and `APP_BASE_URL` host are always recognized to prevent deployment lockouts.
 - **Flow**:
   1. Frontend embeds explicit Turnstile widget via `GET /api/auth/config`.
   2. Frontend sends `turnstile_token` with login request.
