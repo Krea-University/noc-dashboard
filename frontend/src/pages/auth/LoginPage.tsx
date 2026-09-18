@@ -30,6 +30,7 @@ declare global {
             auto_select?: boolean;
             cancel_on_tap_outside?: boolean;
           }) => void;
+          prompt?: (momentListener?: (notification: unknown) => void) => void;
           renderButton: (
             parent: HTMLElement,
             options: {
@@ -67,15 +68,6 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   useEffect(() => {
     if (!clientId) return;
 
-    // Dynamically inject Google Identity Services script if not already present
-    if (!document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-    }
-
     let active = true;
 
     const render = () => {
@@ -109,10 +101,33 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
           width: targetWidth,
         });
         setIsRendered(true);
+
+        // Prompt Google One Tap for instant single-click or automatic institutional login
+        try {
+          window.google.accounts.id.prompt();
+        } catch {
+          // One Tap prompt is non-critical
+        }
       } catch (err) {
         console.error('Failed to render Google Sign-In button:', err);
       }
     };
+
+    // Check if Google script is already loaded and ready
+    if (window.google?.accounts?.id && containerRef.current) {
+      render();
+    }
+
+    // Ensure Google Identity Services script tag exists and has load handler
+    let scriptTag = document.querySelector('script[src="https://accounts.google.com/gsi/client"]') as HTMLScriptElement | null;
+    if (!scriptTag) {
+      scriptTag = document.createElement('script');
+      scriptTag.src = 'https://accounts.google.com/gsi/client';
+      scriptTag.async = true;
+      scriptTag.defer = true;
+      document.head.appendChild(scriptTag);
+    }
+    scriptTag.addEventListener('load', render);
 
     let attempts = 0;
     const interval = setInterval(() => {
@@ -121,10 +136,10 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         clearInterval(interval);
         render();
       }
-      if (attempts > 40) {
+      if (attempts > 120) {
         clearInterval(interval);
       }
-    }, 100);
+    }, 50);
 
     const handleResize = () => {
       if (window.google?.accounts?.id && containerRef.current) {
@@ -136,6 +151,9 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     return () => {
       active = false;
       clearInterval(interval);
+      if (scriptTag) {
+        scriptTag.removeEventListener('load', render);
+      }
       window.removeEventListener('resize', handleResize);
     };
   }, [clientId, onCredential, onError]);
@@ -196,7 +214,7 @@ export const LoginPage: React.FC = () => {
   });
 
   // Fetch dynamic public auth configuration (Turnstile site key & Google client ID)
-  const { data: authConfig } = useQuery({
+  const { data: authConfig, isLoading: isConfigLoading } = useQuery({
     queryKey: ['auth-config'],
     queryFn: api.getAuthConfig,
     staleTime: 30000,
@@ -218,33 +236,55 @@ export const LoginPage: React.FC = () => {
     const siteKey = authConfig?.turnstile_site_key;
     if (!siteKey || turnstileWidgetIdRef.current) return;
 
-    const interval = setInterval(() => {
-      if (window.turnstile && turnstileContainerRef.current) {
-        clearInterval(interval);
-        try {
-          const widgetId = window.turnstile.render(turnstileContainerRef.current, {
-            sitekey: siteKey,
-            action: 'login',
-            theme: 'dark',
-            callback: (token: string) => {
-              setTurnstileToken(token);
-              setErrorMsg('');
-            },
-            'error-callback': () => {
-              setTurnstileToken('');
-            },
-            'expired-callback': () => {
-              setTurnstileToken('');
-            },
-          });
-          turnstileWidgetIdRef.current = widgetId;
-        } catch {
-          // Ignore if already rendered
-        }
-      }
-    }, 200);
+    let active = true;
 
-    return () => clearInterval(interval);
+    const renderTurnstile = () => {
+      if (!active || !window.turnstile || !turnstileContainerRef.current || turnstileWidgetIdRef.current) return;
+      try {
+        const widgetId = window.turnstile.render(turnstileContainerRef.current, {
+          sitekey: siteKey,
+          action: 'login',
+          theme: 'dark',
+          callback: (token: string) => {
+            setTurnstileToken(token);
+            setErrorMsg('');
+          },
+          'error-callback': () => {
+            setTurnstileToken('');
+          },
+          'expired-callback': () => {
+            setTurnstileToken('');
+          },
+        });
+        turnstileWidgetIdRef.current = widgetId;
+      } catch {
+        // Ignore if already rendered
+      }
+    };
+
+    if (window.turnstile && turnstileContainerRef.current) {
+      renderTurnstile();
+    }
+
+    const interval = setInterval(() => {
+      if (window.turnstile && turnstileContainerRef.current && !turnstileWidgetIdRef.current) {
+        clearInterval(interval);
+        renderTurnstile();
+      }
+    }, 100);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      if (turnstileWidgetIdRef.current && window.turnstile) {
+        try {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        } catch {
+          // Ignore
+        }
+        turnstileWidgetIdRef.current = null;
+      }
+    };
   }, [authConfig?.turnstile_site_key]);
 
   // Handle Google OAuth Credential
@@ -343,7 +383,12 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
-        {isPasswordLoginDisabled ? (
+        {isConfigLoading ? (
+          <div className="py-12 flex flex-col items-center justify-center space-y-3">
+            <div className="w-8 h-8 rounded-full border-2 border-blue-500/20 border-t-blue-500 animate-spin" />
+            <span className="text-xs text-slate-400 font-mono">Initializing authentication gateway...</span>
+          </div>
+        ) : isPasswordLoginDisabled ? (
           <div className="space-y-4 pt-1">
             <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-center space-y-2">
               <div className="flex items-center justify-center gap-2 text-xs font-bold text-blue-300">

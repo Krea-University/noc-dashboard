@@ -919,7 +919,7 @@ export const DisplayPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#06090e] text-slate-100 flex flex-col font-sans select-none overflow-x-hidden">
+    <div className="h-screen w-full bg-[#06090e] text-slate-100 flex flex-col font-sans select-none overflow-hidden">
       {/* Recovery Banner */}
       {recoveryBanner && (
         <div className="bg-emerald-600 text-white px-4 sm:px-8 py-2.5 sm:py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shadow-2xl z-40 animate-in slide-in-from-top duration-300">
@@ -1009,9 +1009,9 @@ export const DisplayPage: React.FC = () => {
       )}
 
       {/* TOP HEADER */}
-      <header className="min-h-16 border-b border-slate-800/90 px-3 sm:px-5 py-2 flex flex-wrap 2xl:flex-nowrap items-center justify-between gap-2 sm:gap-3 bg-[#080d17] sticky top-0 z-30 w-full max-w-full">
+      <header className="h-16 border-b border-slate-800/90 px-3 sm:px-5 flex items-center justify-between gap-3 bg-[#080d17] shrink-0 z-30 w-full">
         {/* Brand */}
-        <div className="flex items-center gap-2.5 sm:gap-4 shrink-0 order-1">
+        <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
           <img
             src="https://cdn.krea.edu.in/logo.png"
             alt="Krea Logo"
@@ -1022,12 +1022,12 @@ export const DisplayPage: React.FC = () => {
           />
           <div className="border-l border-slate-800 pl-2.5 sm:pl-3">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm sm:text-base font-black tracking-wide text-white">KREA IT OPERATIONS</h1>
-              <span className="hidden xl:inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              <h1 className="text-sm sm:text-base font-black tracking-wide text-white whitespace-nowrap">KREA IT OPERATIONS</h1>
+              <span className="hidden xl:inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 whitespace-nowrap">
                 NOC TV COMMAND CENTER
               </span>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-[11px] mt-0.5">
+            <div className="hidden sm:flex items-center gap-2 text-[11px] mt-0.5 whitespace-nowrap">
               <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
                 SYSTEMS OPERATIONAL
@@ -1040,8 +1040,8 @@ export const DisplayPage: React.FC = () => {
           </div>
         </div>
 
-        {/* View Switcher Tabs */}
-        <div className="flex items-center justify-start sm:justify-center 2xl:justify-start gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full scrollbar-none order-3 2xl:order-2 w-full 2xl:w-auto shrink">
+        {/* View Switcher Tabs - Always inline, shrink-0, never scrolled off */}
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
           {pages.map((p, idx) => (
             <button
               key={p}
@@ -1069,7 +1069,7 @@ export const DisplayPage: React.FC = () => {
         </div>
 
         {/* Controls: Console Return, Theme, Sound, Clock */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 order-2 2xl:order-3 shrink-0 ml-auto 2xl:ml-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 ml-auto 2xl:ml-0">
           <button
             onClick={() => navigate('/noc')}
             title="Return to IT Operator Console"
@@ -1155,9 +1155,9 @@ export const DisplayPage: React.FC = () => {
         {/* VIEW 0: OVERALL NOC WALL VIEW                                  */}
         {/* ============================================================== */}
         {currentPageIndex === 0 && (
-          <div className="min-h-full flex flex-col justify-between space-y-4">
+          <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             {/* TOP KPI CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 shrink-0">
               <div className="noc-card p-4 rounded-xl border-t-2 border-t-blue-500 bg-[#0a101d]">
                 <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase">
                   <span>Network Infrastructure</span>
@@ -1269,8 +1269,8 @@ export const DisplayPage: React.FC = () => {
                 ))}
               </div>
 
-              <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl flex flex-col justify-between border-slate-800 bg-[#0a101d]">
-                <div>
+              <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl flex flex-col justify-between border-slate-800 bg-[#0a101d] h-full min-h-0">
+                <div className="flex-1 flex flex-col min-h-0">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -1283,9 +1283,9 @@ export const DisplayPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="space-y-2 overflow-y-auto max-h-[440px] pr-1">
+                  <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
                     {alarms && alarms.length > 0 ? (
-                      alarms.slice(0, 5).map((a) => (
+                      alarms.map((a) => (
                         <div
                           key={a.id}
                           className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs hover:border-slate-700 transition-colors"
@@ -1366,8 +1366,8 @@ export const DisplayPage: React.FC = () => {
         {/* VIEW 1: NETWORK & APs                                          */}
         {/* ============================================================== */}
         {currentPageIndex === 1 && (
-          <div className="min-h-full flex flex-col justify-between space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="h-full flex flex-col space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Total Network Nodes</span>
                 <div className="text-2xl font-black text-white font-mono">{networkStats.totalNetNodes}</div>
@@ -1398,7 +1398,7 @@ export const DisplayPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 flex-1 overflow-y-auto max-h-[640px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 flex-1 min-h-0 overflow-y-auto pr-1">
               {devices
                 ?.filter((d) => ['SWITCH', 'ROUTER', 'ILL', 'WIRELESS_AP'].includes(d.category_code))
                 .slice(0, 15)
@@ -1438,8 +1438,8 @@ export const DisplayPage: React.FC = () => {
         {/* VIEW 2: SERVERS VIEW                                           */}
         {/* ============================================================== */}
         {currentPageIndex === 2 && (
-          <div className="min-h-full flex flex-col justify-between space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="h-full flex flex-col space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Total Compute Hosts</span>
                 <div className="text-2xl font-black text-white font-mono">{summary?.servers_total ?? serverDevices?.length ?? 0}</div>
@@ -1460,7 +1460,7 @@ export const DisplayPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
               {serverDevices.map((srv: any) => (
                 <div key={srv.id} className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
                   <div className="flex justify-between items-start">
@@ -1510,10 +1510,13 @@ export const DisplayPage: React.FC = () => {
         {/* ============================================================== */}
         {/* VIEW 3: ENDPOINTS VIEW (COMPLETELY OVERHAULED & POPULATED!)     */}
         {/* ============================================================== */}
+        {/* ============================================================== */}
+        {/* VIEW 3: ENDPOINTS VIEW (COMPLETELY OVERHAULED & POPULATED!)     */}
+        {/* ============================================================== */}
         {currentPageIndex === 3 && (
-          <div className="min-h-full flex flex-col justify-between space-y-3">
+          <div className="h-full flex flex-col space-y-3">
             {/* TOP METRICS ROW */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Total Managed Workstations</span>
                 <div className="text-2xl font-black text-white font-mono mt-0.5">
@@ -1545,7 +1548,7 @@ export const DisplayPage: React.FC = () => {
             {/* TWO COLUMN RICH CONTENT AREA */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-0">
               {/* LEFT COLUMN: Donut Chart & OS Stats */}
-              <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d]">
+              <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d] h-full min-h-0">
                 <div>
                   <div className="text-xs font-black uppercase tracking-wider text-slate-200 mb-2 flex items-center gap-1.5">
                     <Laptop className="w-4 h-4 text-sky-400" />
@@ -1616,8 +1619,8 @@ export const DisplayPage: React.FC = () => {
               </div>
 
               {/* RIGHT COLUMN: Live Workstations Telemetry Table */}
-              <div className="col-span-1 lg:col-span-8 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d]">
-                <div>
+              <div className="col-span-1 lg:col-span-8 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d] h-full min-h-0">
+                <div className="flex-1 flex flex-col min-h-0">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-emerald-400" />
@@ -1629,7 +1632,7 @@ export const DisplayPage: React.FC = () => {
                   </div>
 
                   {/* High Density Table */}
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto flex-1 min-h-0 overflow-y-auto">
                     <table className="w-full text-left text-xs min-w-[640px]">
                       <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] font-mono">
                         <tr>
@@ -1695,8 +1698,8 @@ export const DisplayPage: React.FC = () => {
         {/* VIEW 4: BIOMETRICS VIEW                                        */}
         {/* ============================================================== */}
         {currentPageIndex === 4 && (
-          <div className="min-h-full flex flex-col justify-between space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="h-full flex flex-col space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400 text-[10px] uppercase font-bold">Total Biometric Readers</span>
                 <div className="text-2xl font-black text-white font-mono">{summary?.biometrics_total || biometricDevices.length || 66}</div>
@@ -1725,7 +1728,7 @@ export const DisplayPage: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-0">
               {/* Left Column: Donut & Building Breakdown */}
-              <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d]">
+              <div className="col-span-1 lg:col-span-4 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d] h-full min-h-0">
                 <div>
                   <div className="text-xs font-black uppercase tracking-wider text-slate-200 mb-2 flex items-center gap-1.5">
                     <Fingerprint className="w-4 h-4 text-purple-400" />
@@ -1760,8 +1763,8 @@ export const DisplayPage: React.FC = () => {
               </div>
 
               {/* Right Column: Readers Grid */}
-              <div className="col-span-1 lg:col-span-8 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d]">
-                <div>
+              <div className="col-span-1 lg:col-span-8 noc-card p-4 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d] h-full min-h-0">
+                <div className="flex-1 flex flex-col min-h-0">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
                     <div className="flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-purple-400" />
@@ -1774,7 +1777,7 @@ export const DisplayPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 max-h-[380px] overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
                     {(biometricDevices.length > 0
                       ? biometricDevices
                       : (devices && devices.filter((d) => d.category_code === 'BIOMETRIC')) || []
@@ -1822,9 +1825,9 @@ export const DisplayPage: React.FC = () => {
         {/* VIEW 5: INCIDENTS VIEW                                         */}
         {/* ============================================================== */}
         {currentPageIndex === 5 && (
-          <div className="min-h-full flex flex-col justify-between space-y-4">
+          <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             {/* REAL-TIME KPI HEADER CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 shrink-0">
               <div className="p-4 rounded-xl bg-red-950/20 border border-red-500/40 text-center relative overflow-hidden">
                 {downDevices.length > 0 && (
                   <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
@@ -1872,7 +1875,7 @@ export const DisplayPage: React.FC = () => {
             {/* DUAL-COLUMN HIGH DENSITY INCIDENTS & OUTAGES PANEL */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
               {/* LEFT COLUMN: ACTIVE INCIDENTS & OUTAGES LIST (7 cols) */}
-              <div className="col-span-1 lg:col-span-7 noc-card p-5 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d]">
+              <div className="col-span-1 lg:col-span-7 noc-card p-4 sm:p-5 rounded-xl border-slate-800 flex flex-col justify-between bg-[#0a101d] h-full min-h-0">
                 <div className="flex-1 flex flex-col min-h-0">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
                     <div className="flex items-center gap-2">
@@ -1886,7 +1889,7 @@ export const DisplayPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 max-h-[460px]">
+                  <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5">
                     {activeIncidents.length > 0 ? (
                       activeIncidents.map((inc: any) => (
                         <div
@@ -1970,9 +1973,9 @@ export const DisplayPage: React.FC = () => {
               </div>
 
               {/* RIGHT COLUMN: OUTAGE IMPACT BREAKDOWN & CORRELATED ALARMS (5 cols) */}
-              <div className="col-span-1 lg:col-span-5 flex flex-col gap-4">
+              <div className="col-span-1 lg:col-span-5 flex flex-col gap-3 sm:gap-4 h-full min-h-0">
                 {/* CARD 1: OUTAGE IMPACT BY SUBSYSTEM */}
-                <div className="noc-card p-4 rounded-xl border-slate-800 bg-[#0a101d] flex flex-col justify-between">
+                <div className="noc-card p-4 rounded-xl border-slate-800 bg-[#0a101d] shrink-0">
                   <div>
                     <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-3">
                       <div className="flex items-center gap-2">
@@ -2064,8 +2067,8 @@ export const DisplayPage: React.FC = () => {
                 </div>
 
                 {/* CARD 2: CORRELATED PRIORITY ALARMS */}
-                <div className="noc-card p-4 rounded-xl border-slate-800 bg-[#0a101d] flex-1 flex flex-col justify-between">
-                  <div>
+                <div className="noc-card p-4 rounded-xl border-slate-800 bg-[#0a101d] flex-1 min-h-0 flex flex-col justify-between">
+                  <div className="flex-1 flex flex-col min-h-0">
                     <div className="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -2078,9 +2081,9 @@ export const DisplayPage: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
                       {alarms && alarms.length > 0 ? (
-                        alarms.slice(0, 4).map((a) => (
+                        alarms.map((a) => (
                           <div
                             key={a.id}
                             className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px]"
