@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -149,7 +150,10 @@ func Load(envPath string) (*Config, error) {
 
 		TurnstileSiteKey:   getEnv("TURNSTILE_SITE_KEY", "0x4AAAAAAExldpVxn_Cfx4o7"),
 		TurnstileSecretKey: getEnv("TURNSTILE_SECRET_KEY", "0x4AAAAAAExldgkxpZiriTiET5EUmmzQmQg"),
-		TurnstileHostnames: splitAndTrim(getEnv("TURNSTILE_HOSTNAMES", "")),
+		TurnstileHostnames: parseTurnstileHostnames(
+			getEnv("TURNSTILE_HOSTNAMES", "sc-noc.krea.edu.in,localhost,127.0.0.1,*.krea.edu.in"),
+			getEnv("APP_BASE_URL", ""),
+		),
 
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 
@@ -227,4 +231,45 @@ func loadDotEnv(filepath string) {
 			}
 		}
 	}
+}
+
+func parseTurnstileHostnames(raw, appBaseURL string) []string {
+	list := splitAndTrim(raw)
+	if len(list) == 0 {
+		list = []string{"sc-noc.krea.edu.in", "localhost", "127.0.0.1", "*.krea.edu.in"}
+	}
+
+	// Always ensure standard campus production domain and wildcards are included
+	defaults := []string{"sc-noc.krea.edu.in", "localhost", "127.0.0.1", "*.krea.edu.in"}
+	for _, d := range defaults {
+		found := false
+		for _, existing := range list {
+			if strings.EqualFold(existing, d) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			list = append(list, d)
+		}
+	}
+
+	// If APP_BASE_URL contains a valid host, also permit it
+	if appBaseURL != "" {
+		if u, err := url.Parse(appBaseURL); err == nil && u.Hostname() != "" {
+			host := strings.ToLower(u.Hostname())
+			found := false
+			for _, existing := range list {
+				if strings.EqualFold(existing, host) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				list = append(list, host)
+			}
+		}
+	}
+
+	return list
 }

@@ -94,17 +94,45 @@ func VerifyTurnstileToken(ctx context.Context, secretKey, token, remoteIP, expec
 	}
 
 	if len(allowedHostnames) > 0 && result.Hostname != "" {
-		matched := false
-		for _, h := range allowedHostnames {
-			if strings.EqualFold(strings.TrimSpace(h), result.Hostname) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return fmt.Errorf("turnstile hostname mismatch: %q not in allowed hostnames", result.Hostname)
+		if !IsHostnameAllowed(result.Hostname, allowedHostnames) {
+			return fmt.Errorf("turnstile hostname mismatch: %q not in allowed hostnames (%s)", result.Hostname, strings.Join(allowedHostnames, ", "))
 		}
 	}
 
 	return nil
+}
+
+// IsHostnameAllowed checks if candidate hostname matches any pattern in allowedHostnames.
+// Supports exact match ("sc-noc.krea.edu.in"), wildcard prefix ("*.krea.edu.in" or ".krea.edu.in"),
+// and universal wildcard ("*").
+func IsHostnameAllowed(candidate string, allowedHostnames []string) bool {
+	if len(allowedHostnames) == 0 {
+		return true
+	}
+	resHost := strings.ToLower(strings.TrimSpace(candidate))
+	if resHost == "" {
+		return true
+	}
+	for _, h := range allowedHostnames {
+		trimmed := strings.ToLower(strings.TrimSpace(h))
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "*" || resHost == trimmed {
+			return true
+		}
+		if strings.HasPrefix(trimmed, "*.") {
+			domain := trimmed[2:]
+			if resHost == domain || strings.HasSuffix(resHost, "."+domain) {
+				return true
+			}
+		}
+		if strings.HasPrefix(trimmed, ".") {
+			domain := trimmed[1:]
+			if resHost == domain || strings.HasSuffix(resHost, "."+domain) {
+				return true
+			}
+		}
+	}
+	return false
 }
