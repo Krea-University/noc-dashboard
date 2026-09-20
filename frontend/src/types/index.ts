@@ -51,6 +51,9 @@ export interface Device {
   last_seen_at?: string;
   last_status_change_at?: string;
   metadata_json?: string;
+  building?: string;
+  floor?: string;
+  custom_fields?: Record<string, string>;
   created_at: string;
   updated_at: string;
   biometric_meta?: BiometricMetadata;
@@ -64,6 +67,7 @@ export interface BiometricMetadata {
   vendor: string;
   model: string;
   building: string;
+  floor?: string;
   location: string;
   department: string;
   purpose: string;

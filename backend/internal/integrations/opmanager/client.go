@@ -9,17 +9,25 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Krea-University/noc-dashboard/backend/internal/config"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations"
 )
 
+type notesCacheEntry struct {
+	notes     map[string]string
+	fetchedAt time.Time
+}
+
 // Client communicates with ManageEngine OpManager REST API.
 type Client struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
+	notesMu    sync.RWMutex
+	notesCache map[string]notesCacheEntry
 }
 
 // NewClient creates a new OpManager API client.
@@ -28,7 +36,8 @@ func NewClient(cfg *config.Config) *Client {
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: !cfg.OpManagerVerifyTLS,
 		},
-		MaxIdleConns:        20,
+		MaxIdleConns:        50,
+		MaxIdleConnsPerHost: 25,
 		IdleConnTimeout:     90 * time.Second,
 		DisableCompression: false,
 	}
@@ -40,6 +49,7 @@ func NewClient(cfg *config.Config) *Client {
 			Transport: transport,
 			Timeout:   15 * time.Second,
 		},
+		notesCache: make(map[string]notesCacheEntry),
 	}
 }
 
@@ -184,10 +194,110 @@ func (c *Client) GetDevices(ctx context.Context) ([]integrations.DeviceDTO, erro
 			Vendor:       vendor,
 			Status:       status,
 			LastSeenAt:   now,
+			Building:     "-",
+			Floor:        "-",
 		})
 	}
 
+	// Attach cached custom fields if already in-memory
+	c.notesMu.RLock()
+	for i, d := range dtos {
+		lookupKey := d.IPAddress
+		if lookupKey == "" {
+			lookupKey = d.Name
+		}
+		if entry, ok := c.notesCache[lookupKey]; ok {
+			if bldg, okB := entry.notes["Building"]; okB && strings.TrimSpace(bldg) != "" {
+				dtos[i].Building = strings.TrimSpace(bldg)
+			}
+			if flr, okF := entry.notes["Floor"]; okF && strings.TrimSpace(flr) != "" {
+				dtos[i].Floor = strings.TrimSpace(flr)
+			}
+			dtos[i].CustomFields = entry.notes
+		}
+	}
+	c.notesMu.RUnlock()
+
 	return dtos, nil
+}
+
+// GetDeviceNotes retrieves custom fields (Building, Floor, SerialNumber, etc.) for a device from OpManager.
+func (c *Client) GetDeviceNotes(ctx context.Context, deviceNameOrIP string) (map[string]string, error) {
+	cleanKey := strings.TrimSpace(deviceNameOrIP)
+	if cleanKey == "" {
+		return map[string]string{}, nil
+	}
+
+	// 1. Check in-memory cache (24-hour TTL)
+	c.notesMu.RLock()
+	if entry, ok := c.notesCache[cleanKey]; ok && time.Since(entry.fetchedAt) < 24*time.Hour {
+		cached := entry.notes
+		c.notesMu.RUnlock()
+		return cached, nil
+	}
+	c.notesMu.RUnlock()
+
+	reqURL := fmt.Sprintf("%s/api/json/device/getDeviceNotes?apiKey=%s&name=%s", c.baseURL, url.QueryEscape(c.apiKey), url.QueryEscape(cleanKey))
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return map[string]string{}, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		// Resilience: on network error, return stale cache if available
+		c.notesMu.RLock()
+		if entry, ok := c.notesCache[cleanKey]; ok {
+			cached := entry.notes
+			c.notesMu.RUnlock()
+			return cached, nil
+		}
+		c.notesMu.RUnlock()
+		return map[string]string{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return map[string]string{}, err
+	}
+
+	bodyStr := string(body)
+	if strings.Contains(bodyStr, "URL_ROLLING_THROTTLES_LIMIT_EXCEEDED") || strings.Contains(bodyStr, "throttling limit has been exceeded") {
+		return nil, fmt.Errorf("opmanager api rate limit exceeded")
+	}
+	if strings.Contains(bodyStr, "\"error\":") && strings.Contains(bodyStr, "errorcode") {
+		return nil, fmt.Errorf("opmanager api error: %s", bodyStr)
+	}
+
+	var rawNotes []struct {
+		FieldName  string      `json:"FIELDNAME"`
+		FieldValue interface{} `json:"FIELDVALUE"`
+	}
+	if err := json.Unmarshal(body, &rawNotes); err != nil {
+		return nil, fmt.Errorf("failed parsing device notes: %s", bodyStr)
+	}
+
+	result := make(map[string]string)
+	for _, item := range rawNotes {
+		fn := strings.TrimSpace(item.FieldName)
+		if fn != "" && item.FieldValue != nil {
+			valStr := strings.TrimSpace(fmt.Sprintf("%v", item.FieldValue))
+			if valStr != "" && valStr != "<nil>" {
+				result[fn] = valStr
+			}
+		}
+	}
+
+	// Cache successful result
+	c.notesMu.Lock()
+	c.notesCache[cleanKey] = notesCacheEntry{
+		notes:     result,
+		fetchedAt: time.Now(),
+	}
+	c.notesMu.Unlock()
+
+	return result, nil
 }
 
 func (c *Client) GetDevice(ctx context.Context, sourceID string) (*integrations.DeviceDTO, error) {

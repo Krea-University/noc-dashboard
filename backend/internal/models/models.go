@@ -71,9 +71,12 @@ type Device struct {
 	DiskPct            float64    `json:"disk_pct"`
 	LastSeenAt         *time.Time `json:"last_seen_at,omitempty"`
 	LastStatusChangeAt *time.Time `json:"last_status_change_at,omitempty"`
-	MetadataJSON       string     `json:"metadata_json,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	MetadataJSON       string            `json:"metadata_json,omitempty"`
+	Building           string            `json:"building,omitempty"`
+	Floor              string            `json:"floor,omitempty"`
+	CustomFields       map[string]string `json:"custom_fields,omitempty"`
+	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          time.Time         `json:"updated_at"`
 
 	// Biometric specific enriched metadata
 	BiometricMeta *BiometricMetadata `json:"biometric_meta,omitempty"`
@@ -88,6 +91,7 @@ type BiometricMetadata struct {
 	Vendor        string    `json:"vendor"`
 	Model         string    `json:"model"`
 	Building      string    `json:"building"`
+	Floor         string    `json:"floor"`
 	Location      string    `json:"location"`
 	Department    string    `json:"department"`
 	Purpose       string    `json:"purpose"`

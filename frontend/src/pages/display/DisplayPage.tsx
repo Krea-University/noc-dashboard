@@ -481,28 +481,11 @@ export const DisplayPage: React.FC = () => {
   );
 
   const biometricZoneDistribution = useMemo(() => {
-    const zoneOrder = [
-      'Main Academic Block',
-      'Boys Hostel Wing',
-      'Girls Hostel Wing',
-      'Dining Hall & Kitchen',
-      'Admin & Security Complex',
-    ];
-
     const map = new Map<string, { total: number; up: number; down: number }>();
-    zoneOrder.forEach((z) => map.set(z, { total: 0, up: 0, down: 0 }));
 
     biometricDevices.forEach((d) => {
-      let bldg = d.biometric_meta?.building;
-      if (!bldg || bldg === 'Main Campus') {
-        const ipParts = (d.ip_address || '').split('.');
-        const lastOctet = parseInt(ipParts[3] || '0', 10);
-        if (lastOctet >= 11 && lastOctet <= 36) bldg = 'Main Academic Block';
-        else if (lastOctet >= 37 && lastOctet <= 60) bldg = 'Boys Hostel Wing';
-        else if (lastOctet >= 61 && lastOctet <= 75) bldg = 'Girls Hostel Wing';
-        else if (lastOctet >= 76 && lastOctet <= 85) bldg = 'Dining Hall & Kitchen';
-        else bldg = 'Admin & Security Complex';
-      }
+      const rawBldg = d.building || d.biometric_meta?.building;
+      const bldg = rawBldg && rawBldg.trim() !== '' ? rawBldg.trim() : '-';
 
       const existing = map.get(bldg) || { total: 0, up: 0, down: 0 };
       existing.total += 1;
@@ -512,7 +495,11 @@ export const DisplayPage: React.FC = () => {
     });
 
     return Array.from(map.entries())
-      .filter(([_, stats]) => stats.total > 0)
+      .sort((a, b) => {
+        if (a[0] === '-') return 1;
+        if (b[0] === '-') return -1;
+        return b[1].total - a[1].total;
+      })
       .map(([zone, stats]) => ({
         name: zone,
         ...stats,
@@ -1801,11 +1788,11 @@ export const DisplayPage: React.FC = () => {
                           </span>
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono truncate">{b.ip_address}</div>
-                        <div className="text-[10px] text-slate-500 flex justify-between">
-                          <span className="truncate max-w-[110px]" title={b.biometric_meta?.location || b.biometric_meta?.building || 'Campus'}>
-                            {b.biometric_meta?.location || b.biometric_meta?.building || 'Campus'}
+                        <div className="text-[10px] text-slate-400 flex justify-between">
+                          <span className="truncate max-w-[120px] text-purple-300 font-medium" title={`${b.building || b.biometric_meta?.building || '-'} • ${b.floor || b.biometric_meta?.floor || '-'}`}>
+                            {b.building || b.biometric_meta?.building || '-'} • {b.floor || b.biometric_meta?.floor || '-'}
                           </span>
-                          <span className="font-mono">{b.response_time_ms}ms</span>
+                          <span className="font-mono text-slate-500">{b.response_time_ms}ms</span>
                         </div>
                       </div>
                     ))}

@@ -124,6 +124,16 @@ func main() {
 	vlanPipeline := automation.NewPipeline(db, fg, auditSvc, wsHub)
 	syncEngine := automation.NewSyncReconciliationEngine(db, nms, epc, fg, auditSvc, wsHub)
 
+	// Initial OpManager custom fields backfill (Building, Floor, SerialNumber) in background
+	go func() {
+		time.Sleep(1 * time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		if _, err := syncEngine.BackfillDeviceCustomFields(ctx); err != nil {
+			slog.Warn("initial custom fields backfill warning", "error", err)
+		}
+	}()
+
 	// 7. Background Collectors
 	collectorManager := collectors.NewManager(cfg, db, eventsEngine, nms, epc, fg)
 	collectorManager.Start()

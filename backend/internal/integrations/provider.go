@@ -1,4 +1,4 @@
-﻿package integrations
+package integrations
 
 import (
 	"context"
@@ -25,6 +25,9 @@ type DeviceDTO struct {
 	DiskPct         float64
 	LastSeenAt      time.Time
 	MetadataJSON    string
+	Building        string
+	Floor           string
+	CustomFields    map[string]string
 	Interfaces      []InterfaceDTO
 }
 
@@ -56,6 +59,7 @@ type NMSProvider interface {
 	GetDevices(ctx context.Context) ([]DeviceDTO, error)
 	GetDevice(ctx context.Context, sourceID string) (*DeviceDTO, error)
 	GetAlarms(ctx context.Context) ([]AlarmDTO, error)
+	GetDeviceNotes(ctx context.Context, deviceNameOrIP string) (map[string]string, error)
 	TestConnection(ctx context.Context) error
 }
 

@@ -1071,6 +1071,7 @@ func handleUpdateBiometricMeta(deps *RouterDeps) http.HandlerFunc {
 			Vendor        string `json:"vendor"`
 			Model         string `json:"model"`
 			Building      string `json:"building"`
+			Floor         string `json:"floor"`
 			Location      string `json:"location"`
 			Department    string `json:"department"`
 			Purpose       string `json:"purpose"`
@@ -1088,15 +1089,26 @@ func handleUpdateBiometricMeta(deps *RouterDeps) http.HandlerFunc {
 		if err != nil {
 			metaID := "bmd_" + uuid.New().String()[:8]
 			_, _ = deps.DB.Exec(`
-				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, location, department, purpose, contact_person, notes, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				metaID, id, req.Vendor, req.Model, req.Building, req.Location, req.Department, req.Purpose, req.ContactPerson, req.Notes, now)
+				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				metaID, id, req.Vendor, req.Model, req.Building, req.Floor, req.Location, req.Department, req.Purpose, req.ContactPerson, req.Notes, now)
 		} else {
 			_, _ = deps.DB.Exec(`
 				UPDATE biometric_metadata
-				SET vendor = ?, model = ?, building = ?, location = ?, department = ?, purpose = ?, contact_person = ?, notes = ?, updated_at = ?
+				SET vendor = ?, model = ?, building = ?, floor = ?, location = ?, department = ?, purpose = ?, contact_person = ?, notes = ?, updated_at = ?
 				WHERE device_id = ?`,
-				req.Vendor, req.Model, req.Building, req.Location, req.Department, req.Purpose, req.ContactPerson, req.Notes, now, id)
+				req.Vendor, req.Model, req.Building, req.Floor, req.Location, req.Department, req.Purpose, req.ContactPerson, req.Notes, now, id)
+		}
+
+		// Also update building and floor on the device record directly
+		if req.Building != "" || req.Floor != "" {
+			_, _ = deps.DB.Exec(`
+				UPDATE devices
+				SET building = CASE WHEN ? != '' THEN ? ELSE building END,
+				    floor = CASE WHEN ? != '' THEN ? ELSE floor END,
+				    updated_at = ?
+				WHERE id = ? OR name = ?`,
+				req.Building, req.Building, req.Floor, req.Floor, now, id, id)
 		}
 
 		respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
@@ -3708,7 +3720,7 @@ func handleMockSimulation(deps *RouterDeps) http.HandlerFunc {
 
 func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Device, error) {
 	query := `
-	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, metadata_json, created_at, updated_at
+	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, building, floor, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, metadata_json, created_at, updated_at
 	FROM devices`
 	if whereClause != "" {
 		query += " WHERE " + whereClause
@@ -3724,10 +3736,10 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 	var devices []models.Device
 	for rows.Next() {
 		var d models.Device
-		var mac, vendor, model, metaJSON *string
+		var mac, vendor, model, metaJSON, bldg, flr *string
 		_ = rows.Scan(
 			&d.ID, &d.SourceID, &d.SourceSystem, &d.Name, &d.IPAddress, &mac,
-			&d.CategoryCode, &d.Type, &vendor, &model, &d.Status,
+			&d.CategoryCode, &bldg, &flr, &d.Type, &vendor, &model, &d.Status,
 			&d.AvailabilityPct, &d.ResponseTimeMS, &d.CPUPct, &d.MemPct, &d.DiskPct,
 			&d.LastSeenAt, &d.LastStatusChangeAt, &metaJSON, &d.CreatedAt, &d.UpdatedAt,
 		)
@@ -3740,24 +3752,67 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 		if model != nil {
 			d.Model = *model
 		}
-		if metaJSON != nil {
+		if bldg != nil && strings.TrimSpace(*bldg) != "" {
+			d.Building = strings.TrimSpace(*bldg)
+		} else {
+			d.Building = "-"
+		}
+		if flr != nil && strings.TrimSpace(*flr) != "" {
+			d.Floor = strings.TrimSpace(*flr)
+		} else {
+			d.Floor = "-"
+		}
+		if metaJSON != nil && *metaJSON != "" {
 			d.MetadataJSON = *metaJSON
+			var cf map[string]string
+			if err := json.Unmarshal([]byte(*metaJSON), &cf); err == nil {
+				d.CustomFields = cf
+			}
 		}
 
 		// Attach biometric metadata if category is BIOMETRIC
 		if d.CategoryCode == "BIOMETRIC" {
 			var bm models.BiometricMetadata
-			var bldg, loc, dept, purp, contact, notes, bmVendor, bmModel *string
-			bErr := db.QueryRow("SELECT id, device_id, vendor, model, building, location, department, purpose, contact_person, notes, updated_at FROM biometric_metadata WHERE device_id = ?", d.ID).
-				Scan(&bm.ID, &bm.DeviceID, &bmVendor, &bmModel, &bldg, &loc, &dept, &purp, &contact, &notes, &bm.UpdatedAt)
+			var bmBldg, bmFlr, loc, dept, purp, contact, notes, bmVendor, bmModel *string
+			bErr := db.QueryRow("SELECT id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at FROM biometric_metadata WHERE device_id = ?", d.ID).
+				Scan(&bm.ID, &bm.DeviceID, &bmVendor, &bmModel, &bmBldg, &bmFlr, &loc, &dept, &purp, &contact, &notes, &bm.UpdatedAt)
 			if bErr == nil {
 				if bmVendor != nil { bm.Vendor = *bmVendor }
 				if bmModel != nil { bm.Model = *bmModel }
-				if bldg != nil { bm.Building = *bldg }
-				if loc != nil { bm.Location = *loc }
-				if dept != nil { bm.Department = *dept }
-				if purp != nil { bm.Purpose = *purp }
-				if contact != nil { bm.ContactPerson = *contact }
+				if bmBldg != nil && strings.TrimSpace(*bmBldg) != "" {
+					bm.Building = strings.TrimSpace(*bmBldg)
+				} else if d.Building != "" && d.Building != "-" {
+					bm.Building = d.Building
+				} else {
+					bm.Building = "-"
+				}
+				if bmFlr != nil && strings.TrimSpace(*bmFlr) != "" {
+					bm.Floor = strings.TrimSpace(*bmFlr)
+				} else if d.Floor != "" && d.Floor != "-" {
+					bm.Floor = d.Floor
+				} else {
+					bm.Floor = "-"
+				}
+				if loc != nil && strings.TrimSpace(*loc) != "" {
+					bm.Location = strings.TrimSpace(*loc)
+				} else {
+					bm.Location = "-"
+				}
+				if dept != nil && strings.TrimSpace(*dept) != "" {
+					bm.Department = strings.TrimSpace(*dept)
+				} else {
+					bm.Department = "-"
+				}
+				if purp != nil && strings.TrimSpace(*purp) != "" {
+					bm.Purpose = strings.TrimSpace(*purp)
+				} else {
+					bm.Purpose = "-"
+				}
+				if contact != nil && strings.TrimSpace(*contact) != "" {
+					bm.ContactPerson = strings.TrimSpace(*contact)
+				} else {
+					bm.ContactPerson = "-"
+				}
 				if notes != nil { bm.Notes = *notes }
 				d.BiometricMeta = &bm
 			} else {
@@ -3766,12 +3821,13 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 					DeviceID:      d.ID,
 					Vendor:        d.Vendor,
 					Model:         d.Model,
-					Building:      "Campus Facility",
-					Location:      "Access Point / Turnstile",
-					Department:    "Operations & Security",
+					Building:      d.Building,
+					Floor:         d.Floor,
+					Location:      "-",
+					Department:    "-",
 					Purpose:       "Attendance & Access Control",
-					ContactPerson: "Security Control",
-					Notes:         "Live OpManager Lite Monitored",
+					ContactPerson: "-",
+					Notes:         "Live OpManager Monitored",
 					UpdatedAt:     d.UpdatedAt,
 				}
 			}
@@ -3784,15 +3840,15 @@ func queryDevices(db *database.DB, whereClause string, limit int) ([]models.Devi
 
 func querySingleDevice(db *database.DB, id string) (*models.Device, error) {
 	query := `
-	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, metadata_json, created_at, updated_at
+	SELECT id, source_id, source_system, name, ip_address, mac_address, category_code, building, floor, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, metadata_json, created_at, updated_at
 	FROM devices
 	WHERE id = ? OR name = ?`
 
 	var d models.Device
-	var mac, vendor, model, metaJSON *string
+	var mac, vendor, model, metaJSON, bldg, flr *string
 	err := db.QueryRow(query, id, id).Scan(
 		&d.ID, &d.SourceID, &d.SourceSystem, &d.Name, &d.IPAddress, &mac,
-		&d.CategoryCode, &d.Type, &vendor, &model, &d.Status,
+		&d.CategoryCode, &bldg, &flr, &d.Type, &vendor, &model, &d.Status,
 		&d.AvailabilityPct, &d.ResponseTimeMS, &d.CPUPct, &d.MemPct, &d.DiskPct,
 		&d.LastSeenAt, &d.LastStatusChangeAt, &metaJSON, &d.CreatedAt, &d.UpdatedAt,
 	)
@@ -3808,36 +3864,84 @@ func querySingleDevice(db *database.DB, id string) (*models.Device, error) {
 	if model != nil {
 		d.Model = *model
 	}
-	if metaJSON != nil {
+	if bldg != nil && strings.TrimSpace(*bldg) != "" {
+		d.Building = strings.TrimSpace(*bldg)
+	} else {
+		d.Building = "-"
+	}
+	if flr != nil && strings.TrimSpace(*flr) != "" {
+		d.Floor = strings.TrimSpace(*flr)
+	} else {
+		d.Floor = "-"
+	}
+	if metaJSON != nil && *metaJSON != "" {
 		d.MetadataJSON = *metaJSON
+		var cf map[string]string
+		if err := json.Unmarshal([]byte(*metaJSON), &cf); err == nil {
+			d.CustomFields = cf
+		}
 	}
 
 	// Biometric metadata lookup if applicable
 	if d.CategoryCode == "BIOMETRIC" {
 		var bm models.BiometricMetadata
-		var bldg, loc, dept, purp, contact, notes *string
-		err := db.QueryRow("SELECT id, device_id, vendor, model, building, location, department, purpose, contact_person, notes, updated_at FROM biometric_metadata WHERE device_id = ?", d.ID).
-			Scan(&bm.ID, &bm.DeviceID, &bm.Vendor, &bm.Model, &bldg, &loc, &dept, &purp, &contact, &notes, &bm.UpdatedAt)
+		var bmBldg, bmFlr, loc, dept, purp, contact, notes *string
+		err := db.QueryRow("SELECT id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at FROM biometric_metadata WHERE device_id = ?", d.ID).
+			Scan(&bm.ID, &bm.DeviceID, &bm.Vendor, &bm.Model, &bmBldg, &bmFlr, &loc, &dept, &purp, &contact, &notes, &bm.UpdatedAt)
 		if err == nil {
-			if bldg != nil {
-				bm.Building = *bldg
+			if bmBldg != nil && strings.TrimSpace(*bmBldg) != "" {
+				bm.Building = strings.TrimSpace(*bmBldg)
+			} else if d.Building != "" && d.Building != "-" {
+				bm.Building = d.Building
+			} else {
+				bm.Building = "-"
 			}
-			if loc != nil {
-				bm.Location = *loc
+			if bmFlr != nil && strings.TrimSpace(*bmFlr) != "" {
+				bm.Floor = strings.TrimSpace(*bmFlr)
+			} else if d.Floor != "" && d.Floor != "-" {
+				bm.Floor = d.Floor
+			} else {
+				bm.Floor = "-"
 			}
-			if dept != nil {
-				bm.Department = *dept
+			if loc != nil && strings.TrimSpace(*loc) != "" {
+				bm.Location = strings.TrimSpace(*loc)
+			} else {
+				bm.Location = "-"
 			}
-			if purp != nil {
-				bm.Purpose = *purp
+			if dept != nil && strings.TrimSpace(*dept) != "" {
+				bm.Department = strings.TrimSpace(*dept)
+			} else {
+				bm.Department = "-"
 			}
-			if contact != nil {
-				bm.ContactPerson = *contact
+			if purp != nil && strings.TrimSpace(*purp) != "" {
+				bm.Purpose = strings.TrimSpace(*purp)
+			} else {
+				bm.Purpose = "-"
+			}
+			if contact != nil && strings.TrimSpace(*contact) != "" {
+				bm.ContactPerson = strings.TrimSpace(*contact)
+			} else {
+				bm.ContactPerson = "-"
 			}
 			if notes != nil {
 				bm.Notes = *notes
 			}
 			d.BiometricMeta = &bm
+		} else {
+			d.BiometricMeta = &models.BiometricMetadata{
+				ID:            "bm_" + d.ID,
+				DeviceID:      d.ID,
+				Vendor:        d.Vendor,
+				Model:         d.Model,
+				Building:      d.Building,
+				Floor:         d.Floor,
+				Location:      "-",
+				Department:    "-",
+				Purpose:       "Attendance & Access Control",
+				ContactPerson: "-",
+				Notes:         "Live OpManager Monitored",
+				UpdatedAt:     d.UpdatedAt,
+			}
 		}
 	}
 

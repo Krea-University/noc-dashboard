@@ -152,6 +152,8 @@ export const NetworkPage: React.FC = () => {
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Device Name</th>
                 <th className="py-3 px-4">IP Address</th>
+                <th className="py-3 px-4">Building</th>
+                <th className="py-3 px-4">Floor</th>
                 <th className="py-3 px-4">Type</th>
                 <th className="py-3 px-4">Vendor & Model</th>
                 <th className="py-3 px-4 text-center">Availability</th>
@@ -164,7 +166,7 @@ export const NetworkPage: React.FC = () => {
             <tbody className="divide-y divide-slate-800/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500 italic">
+                  <td colSpan={12} className="py-12 text-center text-slate-500 italic">
                     Loading network devices...
                   </td>
                 </tr>
@@ -193,6 +195,16 @@ export const NetworkPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-100">{dev.name}</td>
                       <td className="py-3 px-4 font-mono text-slate-400">{dev.ip_address}</td>
+                      <td className="py-3 px-4 text-slate-300">
+                        <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-750 font-mono text-[11px]">
+                          {dev.building || '-'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-300">
+                        <span className="px-2 py-0.5 rounded bg-slate-800/80 border border-slate-750 font-mono text-[11px]">
+                          {dev.floor || '-'}
+                        </span>
+                      </td>
                       <td className="py-3 px-4 text-slate-300">{dev.type}</td>
                       <td className="py-3 px-4 text-slate-400">
                         {dev.vendor} {dev.model}
@@ -225,7 +237,7 @@ export const NetworkPage: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500 italic">
+                  <td colSpan={12} className="py-12 text-center text-slate-500 italic">
                     No network devices matched the filter.
                   </td>
                 </tr>

@@ -35,6 +35,13 @@ func (m *MockProvider) TestConnection(ctx context.Context) error {
 	return nil
 }
 
+func (m *MockProvider) GetDeviceNotes(ctx context.Context, deviceNameOrIP string) (map[string]string, error) {
+	return map[string]string{
+		"Building": "JSW",
+		"Floor":    "1F",
+	}, nil
+}
+
 func (m *MockProvider) initializeSeedData() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

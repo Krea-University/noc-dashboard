@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,6 +26,8 @@ type SyncDeviceItem struct {
 	Name         string   `json:"name"`
 	IPAddress    string   `json:"ip_address"`
 	CategoryCode string   `json:"category_code"`
+	Building     string   `json:"building,omitempty"`
+	Floor        string   `json:"floor,omitempty"`
 	Type         string   `json:"type"`
 	Vendor       string   `json:"vendor"`
 	Model        string   `json:"model"`
@@ -145,7 +148,7 @@ func (e *SyncReconciliationEngine) previewSyncUnlocked(ctx context.Context) (*Sy
 
 	// 2. Fetch local devices from DB
 	localRows, err := e.db.QueryContext(ctx, `
-		SELECT id, source_id, source_system, name, ip_address, category_code, type, vendor, model, status
+		SELECT id, source_id, source_system, name, ip_address, category_code, COALESCE(building, '-'), COALESCE(floor, '-'), type, vendor, model, status
 		FROM devices`)
 	if err != nil {
 		return nil, fmt.Errorf("failed querying local devices: %w", err)
@@ -159,6 +162,8 @@ func (e *SyncReconciliationEngine) previewSyncUnlocked(ctx context.Context) (*Sy
 		name         string
 		ipAddress    string
 		categoryCode string
+		building     string
+		floor        string
 		devType      string
 		vendor       string
 		model        string
@@ -172,7 +177,7 @@ func (e *SyncReconciliationEngine) previewSyncUnlocked(ctx context.Context) (*Sy
 	for localRows.Next() {
 		var ld localDev
 		var srcID, vendor, model *string
-		_ = localRows.Scan(&ld.id, &srcID, &ld.sourceSystem, &ld.name, &ld.ipAddress, &ld.categoryCode, &ld.devType, &vendor, &model, &ld.status)
+		_ = localRows.Scan(&ld.id, &srcID, &ld.sourceSystem, &ld.name, &ld.ipAddress, &ld.categoryCode, &ld.building, &ld.floor, &ld.devType, &vendor, &model, &ld.status)
 		if srcID != nil {
 			ld.sourceID = *srcID
 		}
@@ -214,6 +219,8 @@ func (e *SyncReconciliationEngine) previewSyncUnlocked(ctx context.Context) (*Sy
 				Name:         up.Name,
 				IPAddress:    up.IPAddress,
 				CategoryCode: up.CategoryCode,
+				Building:     up.Building,
+				Floor:        up.Floor,
 				Type:         up.Type,
 				Vendor:       up.Vendor,
 				Model:        up.Model,
@@ -232,6 +239,12 @@ func (e *SyncReconciliationEngine) previewSyncUnlocked(ctx context.Context) (*Sy
 			if existing.categoryCode != up.CategoryCode && up.CategoryCode != "" {
 				diffs = append(diffs, fmt.Sprintf("Category: %s → %s", existing.categoryCode, up.CategoryCode))
 			}
+			if up.Building != "" && up.Building != "-" && existing.building != up.Building {
+				diffs = append(diffs, fmt.Sprintf("Building: %s → %s", existing.building, up.Building))
+			}
+			if up.Floor != "" && up.Floor != "-" && existing.floor != up.Floor {
+				diffs = append(diffs, fmt.Sprintf("Floor: %s → %s", existing.floor, up.Floor))
+			}
 
 			if len(diffs) > 0 {
 				res.ToUpdate = append(res.ToUpdate, SyncDeviceItem{
@@ -241,6 +254,8 @@ func (e *SyncReconciliationEngine) previewSyncUnlocked(ctx context.Context) (*Sy
 					Name:         existing.name,
 					IPAddress:    up.IPAddress,
 					CategoryCode: up.CategoryCode,
+					Building:     up.Building,
+					Floor:        up.Floor,
 					Type:         up.Type,
 					Vendor:       up.Vendor,
 					Model:        up.Model,
@@ -334,28 +349,36 @@ func (e *SyncReconciliationEngine) ExecuteSync(
 		}
 
 		newID := "dev_" + uuid.New().String()[:8]
+		bldg := item.Building
+		if bldg == "" {
+			bldg = "-"
+		}
+		flr := item.Floor
+		if flr == "" {
+			flr = "-"
+		}
 		insertSQL := `
 			INSERT INTO devices (
 				id, source_id, source_system, name, ip_address, category_code, 
-				type, vendor, model, status, availability_pct, response_time_ms, 
+				building, floor, type, vendor, model, status, availability_pct, response_time_ms, 
 				cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 100.0, 5, 0.0, 0.0, 0.0, ?, ?, ?, ?)`
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 100.0, 5, 0.0, 0.0, 0.0, ?, ?, ?, ?)`
 		_, err := tx.ExecContext(ctx, insertSQL,
 			newID, item.SourceID, "opmanager", item.Name, item.IPAddress, item.CategoryCode,
-			item.Type, item.Vendor, item.Model, item.Status, now, now, now, now,
+			bldg, flr, item.Type, item.Vendor, item.Model, item.Status, now, now, now, now,
 		)
 		if err != nil {
 			slog.Error("failed inserting discovered device during sync", "name", item.Name, "error", err)
 			continue
 		}
 
-		// If biometric, create biometric_metadata entry
+		// If biometric, create biometric_metadata entry with real building & floor
 		if item.CategoryCode == "BIOMETRIC" {
 			bmID := "bm_" + uuid.New().String()[:8]
 			_, _ = tx.ExecContext(ctx, `
-				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, location, department, purpose, contact_person, notes, updated_at)
-				VALUES (?, ?, ?, ?, 'Campus Main', 'Access Control Point', 'Operations', 'Biometric Attendance', 'NOC Administrator', 'Auto-discovered via Full Sync', ?)`,
-				bmID, newID, item.Vendor, item.Model, now)
+				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, '-', '-', 'Biometric Attendance', '-', 'Auto-discovered via Full Sync', ?)`,
+				bmID, newID, item.Vendor, item.Model, bldg, flr, now)
 		}
 
 		addedCount++
@@ -363,12 +386,29 @@ func (e *SyncReconciliationEngine) ExecuteSync(
 
 	// 2. Process Updates
 	for _, item := range preview.ToUpdate {
+		bldg := item.Building
+		if bldg == "" {
+			bldg = "-"
+		}
+		flr := item.Floor
+		if flr == "" {
+			flr = "-"
+		}
 		updateSQL := `
 			UPDATE devices
-			SET ip_address = ?, category_code = ?, type = ?, status = ?, last_seen_at = ?, updated_at = ?
+			SET ip_address = ?, category_code = ?, building = CASE WHEN ? != '-' THEN ? ELSE building END, floor = CASE WHEN ? != '-' THEN ? ELSE floor END, type = ?, status = ?, last_seen_at = ?, updated_at = ?
 			WHERE id = ?`
-		_, err := tx.ExecContext(ctx, updateSQL, item.IPAddress, item.CategoryCode, item.Type, item.Status, now, now, item.ID)
+		_, err := tx.ExecContext(ctx, updateSQL, item.IPAddress, item.CategoryCode, bldg, bldg, flr, flr, item.Type, item.Status, now, now, item.ID)
 		if err == nil {
+			if item.CategoryCode == "BIOMETRIC" && (bldg != "-" || flr != "-") {
+				_, _ = tx.ExecContext(ctx, `
+					UPDATE biometric_metadata
+					SET building = CASE WHEN ? != '-' THEN ? ELSE building END,
+					    floor = CASE WHEN ? != '-' THEN ? ELSE floor END,
+					    updated_at = ?
+					WHERE device_id = ?`,
+					bldg, bldg, flr, flr, now, item.ID)
+			}
 			updatedCount++
 		}
 	}
@@ -460,4 +500,149 @@ func (e *SyncReconciliationEngine) ExecuteSync(
 		AuditLogID:   auditRecord.ID,
 		Message:      summaryMsg,
 	}, nil
+}
+
+// BackfillDeviceCustomFields synchronizes Building, Floor, and custom notes from OpManager for all database devices.
+func (e *SyncReconciliationEngine) BackfillDeviceCustomFields(ctx context.Context) (int, error) {
+	if e.nmsProvider == nil {
+		return 0, nil
+	}
+
+	rows, err := e.db.QueryContext(ctx, `
+		SELECT id, name, ip_address, category_code, COALESCE(building, '-'), COALESCE(floor, '-')
+		FROM devices
+		ORDER BY (CASE WHEN category_code = 'BIOMETRIC' THEN 1 WHEN category_code = 'SWITCH' THEN 2 WHEN category_code = 'SERVER' THEN 3 ELSE 4 END)`)
+	if err != nil {
+		return 0, fmt.Errorf("failed querying devices for custom field backfill: %w", err)
+	}
+	defer rows.Close()
+
+	type devInfo struct {
+		id       string
+		name     string
+		ip       string
+		category string
+		bldg     string
+		floor    string
+	}
+	var devList []devInfo
+	for rows.Next() {
+		var d devInfo
+		if err := rows.Scan(&d.id, &d.name, &d.ip, &d.category, &d.bldg, &d.floor); err == nil {
+			devList = append(devList, d)
+		}
+	}
+
+	if len(devList) == 0 {
+		return 0, nil
+	}
+
+	tasks := make(chan devInfo, len(devList))
+	for _, d := range devList {
+		tasks <- d
+	}
+	close(tasks)
+
+	// Controlled concurrency: 3 workers with pacing to avoid OpManager API throttling
+	numWorkers := 3
+	if len(devList) < numWorkers {
+		numWorkers = len(devList)
+	}
+
+	var wg sync.WaitGroup
+	now := time.Now().UTC()
+	updatedTotal := 0
+	var updateMu sync.Mutex
+
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for d := range tasks {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				// Pacing: 150ms between requests per worker to stay well within limits
+				time.Sleep(150 * time.Millisecond)
+
+				lookupKey := d.ip
+				if lookupKey == "" {
+					lookupKey = d.name
+				}
+				notes, err := e.nmsProvider.GetDeviceNotes(ctx, lookupKey)
+				if err != nil {
+					if strings.Contains(err.Error(), "rate limit") {
+						time.Sleep(5 * time.Second)
+					}
+					// If lookup by IP failed and name is available, try name only if name does not contain spaces
+					if d.name != "" && d.name != lookupKey && !strings.Contains(d.name, " ") {
+						n2, e2 := e.nmsProvider.GetDeviceNotes(ctx, d.name)
+						if e2 == nil {
+							notes = n2
+							err = nil
+						}
+					}
+				}
+
+				// CRITICAL: On error or rate-limit, do NOT overwrite database with '-'
+				if err != nil {
+					continue
+				}
+
+				bldg := "-"
+				if val, ok := notes["Building"]; ok && strings.TrimSpace(val) != "" {
+					bldg = strings.TrimSpace(val)
+				}
+				floor := "-"
+				if val, ok := notes["Floor"]; ok && strings.TrimSpace(val) != "" {
+					floor = strings.TrimSpace(val)
+				}
+
+				var metaJSON string
+				if len(notes) > 0 {
+					if b, mErr := json.Marshal(notes); mErr == nil {
+						metaJSON = string(b)
+					}
+				}
+
+				// Update devices
+				_, uErr := e.db.ExecContext(ctx, `
+					UPDATE devices
+					SET building = ?, floor = ?, metadata_json = COALESCE(NULLIF(?, ''), metadata_json), updated_at = ?
+					WHERE id = ?`,
+					bldg, floor, metaJSON, now, d.id)
+
+				if uErr == nil {
+					updateMu.Lock()
+					updatedTotal++
+					updateMu.Unlock()
+				}
+
+				if uErr == nil && d.category == "BIOMETRIC" {
+					var metaID string
+					_ = e.db.QueryRowContext(ctx, "SELECT id FROM biometric_metadata WHERE device_id = ?", d.id).Scan(&metaID)
+					if metaID == "" {
+						bmID := "bm_" + uuid.New().String()[:8]
+						_, _ = e.db.ExecContext(ctx, `
+							INSERT INTO biometric_metadata (id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at)
+							VALUES (?, ?, 'ZKTeco', 'SpeedFace', ?, ?, '-', '-', 'Biometric Attendance', '-', 'OpManager Monitored', ?)`,
+							bmID, d.id, bldg, floor, now)
+					} else {
+						_, _ = e.db.ExecContext(ctx, `
+							UPDATE biometric_metadata
+							SET building = ?, floor = ?, updated_at = ?
+							WHERE device_id = ?`,
+							bldg, floor, now, d.id)
+					}
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	slog.Info("opmanager custom fields backfill finished", "devices_processed", len(devList), "devices_updated", updatedTotal)
+	return updatedTotal, nil
 }

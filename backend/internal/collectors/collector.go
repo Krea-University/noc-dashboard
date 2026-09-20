@@ -2,6 +2,7 @@ package collectors
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"sync"
@@ -126,18 +127,34 @@ func (m *CollectorManager) upsertDevice(dto integrations.DeviceDTO, now time.Tim
 	// Look up existing device
 	var dev models.Device
 	var lastStatusChange *time.Time
-	query := "SELECT id, status, last_status_change_at FROM devices WHERE name = ? OR source_id = ?"
-	err := m.db.QueryRow(query, dto.Name, dto.SourceID).Scan(&dev.ID, &dev.Status, &lastStatusChange)
+	var existingBldg, existingFloor *string
+	query := "SELECT id, status, last_status_change_at, building, floor FROM devices WHERE name = ? OR source_id = ?"
+	err := m.db.QueryRow(query, dto.Name, dto.SourceID).Scan(&dev.ID, &dev.Status, &lastStatusChange, &existingBldg, &existingFloor)
+
+	bldg := dto.Building
+	if bldg == "" {
+		bldg = "-"
+	}
+	flr := dto.Floor
+	if flr == "" {
+		flr = "-"
+	}
+	metaJSON := dto.MetadataJSON
+	if metaJSON == "" && len(dto.CustomFields) > 0 {
+		if b, mErr := json.Marshal(dto.CustomFields); mErr == nil {
+			metaJSON = string(b)
+		}
+	}
 
 	if err != nil {
 		// New device
 		devID := "dev_" + uuid.New().String()[:8]
 		insertSQL := `
-		INSERT INTO devices (id, source_id, source_system, name, ip_address, mac_address, category_code, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, created_at, updated_at)
-		VALUES (?, ?, 'opmanager', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO devices (id, source_id, source_system, name, ip_address, mac_address, category_code, building, floor, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, metadata_json, last_seen_at, last_status_change_at, created_at, updated_at)
+		VALUES (?, ?, 'opmanager', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		_, err := m.db.Exec(insertSQL, devID, dto.SourceID, dto.Name, dto.IPAddress, dto.MACAddress,
-			dto.CategoryCode, dto.Type, dto.Vendor, dto.Model, dto.Status, dto.AvailabilityPct,
-			dto.ResponseTimeMS, dto.CPUPct, dto.MemPct, dto.DiskPct, now, now, now, now)
+			dto.CategoryCode, bldg, flr, dto.Type, dto.Vendor, dto.Model, dto.Status, dto.AvailabilityPct,
+			dto.ResponseTimeMS, dto.CPUPct, dto.MemPct, dto.DiskPct, metaJSON, now, now, now, now)
 		if err != nil {
 			slog.Error("failed inserting new device", "name", dto.Name, "error", err)
 			return nil
@@ -147,42 +164,61 @@ func (m *CollectorManager) upsertDevice(dto integrations.DeviceDTO, now time.Tim
 		dev.Status = dto.Status
 		dev.CategoryCode = dto.CategoryCode
 		dev.IPAddress = dto.IPAddress
+		dev.Building = bldg
+		dev.Floor = flr
 
-		// If biometric device, ensure metadata record exists
+		// If biometric device, ensure metadata record exists with real Building and Floor
 		if dto.CategoryCode == "BIOMETRIC" {
 			bmID := "bm_" + uuid.New().String()[:8]
 			_, _ = m.db.Exec(`
-				INSERT INTO biometric_devices_metadata (id, device_id, door_name, location_details, building, floor, direction, reader_model, last_sync_at, created_at, updated_at)
-				VALUES (?, ?, ?, 'Campus Access Point', 'Campus', 'Ground Floor', 'ENTRY', ?, ?, ?, ?)`,
-				bmID, devID, dto.Name, dto.Vendor, now, now, now)
+				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, '-', '-', 'Biometric Attendance', '-', 'OpManager Monitored', ?)`,
+				bmID, devID, dto.Vendor, dto.Model, bldg, flr, now)
 		}
 
 		return &dev
 	}
 
-	// Existing device: update telemetry & classification
+	// Existing device: update telemetry & classification & custom fields
+	if (bldg == "" || bldg == "-") && existingBldg != nil && *existingBldg != "" && *existingBldg != "-" {
+		bldg = *existingBldg
+	}
+	if (flr == "" || flr == "-") && existingFloor != nil && *existingFloor != "" && *existingFloor != "-" {
+		flr = *existingFloor
+	}
+
 	updateSQL := `
 	UPDATE devices
-	SET ip_address = ?, category_code = ?, type = ?, cpu_pct = ?, mem_pct = ?, disk_pct = ?, response_time_ms = ?, availability_pct = ?, last_seen_at = ?, updated_at = ?
+	SET ip_address = ?, category_code = ?, building = ?, floor = ?, type = ?, cpu_pct = ?, mem_pct = ?, disk_pct = ?, response_time_ms = ?, availability_pct = ?, metadata_json = COALESCE(NULLIF(?, ''), metadata_json), last_seen_at = ?, updated_at = ?
 	WHERE id = ?`
-	_, _ = m.db.Exec(updateSQL, dto.IPAddress, dto.CategoryCode, dto.Type, dto.CPUPct, dto.MemPct, dto.DiskPct, dto.ResponseTimeMS, dto.AvailabilityPct, now, now, dev.ID)
+	_, _ = m.db.Exec(updateSQL, dto.IPAddress, dto.CategoryCode, bldg, flr, dto.Type, dto.CPUPct, dto.MemPct, dto.DiskPct, dto.ResponseTimeMS, dto.AvailabilityPct, metaJSON, now, now, dev.ID)
 
 	dev.Name = dto.Name
 	dev.CategoryCode = dto.CategoryCode
 	dev.IPAddress = dto.IPAddress
+	dev.Building = bldg
+	dev.Floor = flr
 	// Note: dev.Status contains new status reported by provider for transition engine to compare
 	dev.Status = dto.Status
 
-	// If biometric, ensure metadata record exists
+	// If biometric, ensure metadata record exists with real values
 	if dto.CategoryCode == "BIOMETRIC" {
 		var metaID string
 		_ = m.db.QueryRow("SELECT id FROM biometric_metadata WHERE device_id = ?", dev.ID).Scan(&metaID)
 		if metaID == "" {
 			bmID := "bm_" + uuid.New().String()[:8]
 			_, _ = m.db.Exec(`
-				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, location, department, purpose, contact_person, notes, updated_at)
-				VALUES (?, ?, 'ZKTeco', 'SpeedFace-V5L', 'Main Campus', 'Turnstile / Access Barrier', 'Security & Operations', 'Attendance & Access Control', 'Campus Security', 'Monitored via OpManager Lite', ?)`,
-				bmID, dev.ID, now)
+				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, '-', '-', 'Biometric Attendance', '-', 'OpManager Monitored', ?)`,
+				bmID, dev.ID, dto.Vendor, dto.Model, bldg, flr, now)
+		} else if bldg != "-" || flr != "-" {
+			_, _ = m.db.Exec(`
+				UPDATE biometric_metadata
+				SET building = CASE WHEN ? != '-' THEN ? ELSE building END,
+				    floor = CASE WHEN ? != '-' THEN ? ELSE floor END,
+				    updated_at = ?
+				WHERE device_id = ?`,
+				bldg, bldg, flr, flr, now, dev.ID)
 		}
 	}
 

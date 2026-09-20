@@ -90,7 +90,16 @@ export const ServersPage: React.FC = () => {
                       <span className="text-xs font-mono text-slate-400">{srv.ip_address}</span>
                     </div>
                     <h3 className="text-base font-bold text-slate-100">{srv.name}</h3>
-                    <div className="text-xs text-slate-400 mt-0.5">{srv.type}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-slate-400">{srv.type}</span>
+                      <span className="text-slate-600">•</span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-750 font-mono text-[10px] text-slate-300">
+                        {srv.building || '-'}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-750 font-mono text-[10px] text-slate-300">
+                        {srv.floor || '-'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="text-right">

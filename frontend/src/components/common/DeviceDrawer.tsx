@@ -19,6 +19,7 @@ import {
   Globe,
   FileText,
   CheckCircle2,
+  Building2,
 } from 'lucide-react';
 import { Device, DeviceHistory } from '../../types';
 import { api } from '../../api/client';
@@ -64,6 +65,7 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioForm, setBioForm] = useState({
     building: '',
+    floor: '',
     location: '',
     department: '',
     purpose: '',
@@ -97,14 +99,15 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
       setIsEditingNotes(false);
       setNotesSaveMsg(null);
 
-      if (device.biometric_meta) {
+      if (device.biometric_meta || device.building || device.floor) {
         setBioForm({
-          building: device.biometric_meta.building || '',
-          location: device.biometric_meta.location || '',
-          department: device.biometric_meta.department || '',
-          purpose: device.biometric_meta.purpose || '',
-          contact_person: device.biometric_meta.contact_person || '',
-          notes: device.biometric_meta.notes || '',
+          building: device.biometric_meta?.building || device.building || '',
+          floor: device.biometric_meta?.floor || device.floor || '',
+          location: device.biometric_meta?.location || '',
+          department: device.biometric_meta?.department || '',
+          purpose: device.biometric_meta?.purpose || '',
+          contact_person: device.biometric_meta?.contact_person || '',
+          notes: device.biometric_meta?.notes || '',
         });
       }
     }
@@ -314,6 +317,14 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
                     <span className="text-slate-200 font-medium">{device.type || device.model || 'Standard Device'}</span>
                   </div>
                   <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Building</span>
+                    <span className="text-purple-300 font-semibold">{device.building || device.biometric_meta?.building || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Floor</span>
+                    <span className="text-purple-300 font-mono font-semibold">{device.floor || device.biometric_meta?.floor || '-'}</span>
+                  </div>
+                  <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-bold">IP Address</span>
                     <span className="text-slate-200 font-mono">{device.ip_address}</span>
                   </div>
@@ -322,12 +333,12 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
                     <span className="text-slate-200 font-mono">{device.mac_address || '00:1A:2B:3C:4D:5E'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Location</span>
-                    <span className="text-slate-200">{device.location_name || 'Main Campus'}</span>
-                  </div>
-                  <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-bold">Campus Site</span>
                     <span className="text-slate-200">{device.site_name || 'Sri City Campus'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Placement / Location</span>
+                    <span className="text-slate-200">{device.biometric_meta?.location || device.location_name || '-'}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block text-[10px] uppercase font-bold">Last Status Change</span>
@@ -345,6 +356,25 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
                   </div>
                 </div>
               </div>
+
+              {/* OpManager Custom Fields (All Categories) */}
+              {device.custom_fields && Object.keys(device.custom_fields).length > 0 && (
+                <div className="noc-card p-4 rounded-xl border-slate-800 space-y-3">
+                  <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-blue-400" /> OpManager Custom Fields
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
+                    {Object.entries(device.custom_fields).map(([k, v]) => (
+                      <div key={k}>
+                        <span className="text-slate-500 block text-[10px] uppercase font-bold">{k}</span>
+                        <span className="text-slate-200 font-medium font-mono truncate block" title={v}>
+                          {v || '-'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Biometric Details (if category is Biometric) */}
               {device.category_code === 'BIOMETRIC' && (
@@ -374,52 +404,87 @@ export const DeviceDrawer: React.FC<Props> = ({ device, isOpen, onClose, onRefre
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <span className="text-slate-500 text-[10px]">Building:</span>
-                        <span className="text-slate-200 font-medium block">
-                          {device.biometric_meta?.building || 'Hostel Block'}
+                        <span className="text-purple-300 font-semibold block">
+                          {device.biometric_meta?.building || device.building || '-'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-[10px]">Floor:</span>
+                        <span className="text-purple-300 font-mono font-semibold block">
+                          {device.biometric_meta?.floor || device.floor || '-'}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 text-[10px]">Specific Location:</span>
                         <span className="text-slate-200 font-medium block">
-                          {device.biometric_meta?.location || 'Ground Floor Entry'}
+                          {device.biometric_meta?.location || '-'}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 text-[10px]">Department:</span>
                         <span className="text-slate-200 font-medium block">
-                          {device.biometric_meta?.department || 'Student Affairs'}
+                          {device.biometric_meta?.department || '-'}
                         </span>
                       </div>
                       <div>
                         <span className="text-slate-500 text-[10px]">Contact Person:</span>
                         <span className="text-slate-200 font-medium block">
-                          {device.biometric_meta?.contact_person || 'Campus Facilities'}
+                          {device.biometric_meta?.contact_person || '-'}
                         </span>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-2 text-xs">
-                      <input
-                        type="text"
-                        placeholder="Building"
-                        value={bioForm.building}
-                        onChange={(e) => setBioForm({ ...bioForm, building: e.target.value })}
-                        className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Location"
-                        value={bioForm.location}
-                        onChange={(e) => setBioForm({ ...bioForm, location: e.target.value })}
-                        className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Department"
-                        value={bioForm.department}
-                        onChange={(e) => setBioForm({ ...bioForm, department: e.target.value })}
-                        className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
-                      />
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Building</label>
+                        <input
+                          type="text"
+                          placeholder="Building (e.g. JSW, NAB, Main Gate)"
+                          value={bioForm.building}
+                          onChange={(e) => setBioForm({ ...bioForm, building: e.target.value })}
+                          className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Floor</label>
+                        <input
+                          type="text"
+                          placeholder="Floor (e.g. GF, 1F, 2F, 3F)"
+                          value={bioForm.floor}
+                          onChange={(e) => setBioForm({ ...bioForm, floor: e.target.value })}
+                          className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Specific Location</label>
+                        <input
+                          type="text"
+                          placeholder="Location details"
+                          value={bioForm.location}
+                          onChange={(e) => setBioForm({ ...bioForm, location: e.target.value })}
+                          className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Department</label>
+                        <input
+                          type="text"
+                          placeholder="Department"
+                          value={bioForm.department}
+                          onChange={(e) => setBioForm({ ...bioForm, department: e.target.value })}
+                          className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">Contact Person</label>
+                        <input
+                          type="text"
+                          placeholder="Contact Person"
+                          value={bioForm.contact_person}
+                          onChange={(e) => setBioForm({ ...bioForm, contact_person: e.target.value })}
+                          className="w-full p-2 rounded bg-slate-900 border border-slate-800 text-slate-200"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
