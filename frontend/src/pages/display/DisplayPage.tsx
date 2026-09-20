@@ -91,7 +91,7 @@ export const DisplayPage: React.FC = () => {
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
 
-  const pages = ['OVERALL', 'NETWORK', 'SERVERS', 'ENDPOINTS', 'BIOMETRICS', 'INCIDENTS'];
+  const pages = ['OVERALL', 'BIOMETRICS', 'NETWORK', 'SERVERS', 'ENDPOINTS', 'INCIDENTS'];
   const rotationSeconds = 30;
   const [secondsRemaining, setSecondsRemaining] = useState(rotationSeconds);
 
@@ -1141,7 +1141,7 @@ export const DisplayPage: React.FC = () => {
         {/* ============================================================== */}
         {/* VIEW 0: OVERALL NOC WALL VIEW                                  */}
         {/* ============================================================== */}
-        {currentPageIndex === 0 && (
+        {pages[currentPageIndex] === 'OVERALL' && (
           <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             {/* TOP KPI CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 shrink-0">
@@ -1350,9 +1350,9 @@ export const DisplayPage: React.FC = () => {
         )}
 
         {/* ============================================================== */}
-        {/* VIEW 1: NETWORK & APs                                          */}
+        {/* VIEW: NETWORK & APs                                           */}
         {/* ============================================================== */}
-        {currentPageIndex === 1 && (
+        {pages[currentPageIndex] === 'NETWORK' && (
           <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
@@ -1422,9 +1422,9 @@ export const DisplayPage: React.FC = () => {
         )}
 
         {/* ============================================================== */}
-        {/* VIEW 2: SERVERS VIEW                                           */}
+        {/* VIEW: SERVERS VIEW                                           */}
         {/* ============================================================== */}
-        {currentPageIndex === 2 && (
+        {pages[currentPageIndex] === 'SERVERS' && (
           <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
@@ -1498,9 +1498,9 @@ export const DisplayPage: React.FC = () => {
         {/* VIEW 3: ENDPOINTS VIEW (COMPLETELY OVERHAULED & POPULATED!)     */}
         {/* ============================================================== */}
         {/* ============================================================== */}
-        {/* VIEW 3: ENDPOINTS VIEW (COMPLETELY OVERHAULED & POPULATED!)     */}
+        {/* VIEW: ENDPOINTS VIEW                                          */}
         {/* ============================================================== */}
-        {currentPageIndex === 3 && (
+        {pages[currentPageIndex] === 'ENDPOINTS' && (
           <div className="h-full flex flex-col space-y-3">
             {/* TOP METRICS ROW */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0">
@@ -1682,9 +1682,9 @@ export const DisplayPage: React.FC = () => {
         )}
 
         {/* ============================================================== */}
-        {/* VIEW 4: BIOMETRICS VIEW                                        */}
+        {/* VIEW: BIOMETRICS VIEW                                        */}
         {/* ============================================================== */}
-        {currentPageIndex === 4 && (
+        {pages[currentPageIndex] === 'BIOMETRICS' && (
           <div className="h-full flex flex-col space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 shrink-0">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
@@ -1809,9 +1809,9 @@ export const DisplayPage: React.FC = () => {
         )}
 
         {/* ============================================================== */}
-        {/* VIEW 5: INCIDENTS VIEW                                         */}
+        {/* VIEW: INCIDENTS VIEW                                         */}
         {/* ============================================================== */}
-        {currentPageIndex === 5 && (
+        {pages[currentPageIndex] === 'INCIDENTS' && (
           <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             {/* REAL-TIME KPI HEADER CARDS */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 shrink-0">
