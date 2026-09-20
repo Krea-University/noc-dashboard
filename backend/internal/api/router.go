@@ -30,6 +30,8 @@ import (
 	"github.com/Krea-University/noc-dashboard/backend/internal/websocket"
 )
 
+var serverStartTime = time.Now().UTC()
+
 // RouterDeps provides dependencies for the API router.
 type RouterDeps struct {
 	Cfg          *config.Config
@@ -104,6 +106,17 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 	r.Get("/health/integrations", handleHealthIntegrations(deps))
+
+	// Public Version & App Update Endpoint
+	r.Get("/api/version", func(w http.ResponseWriter, r *http.Request) {
+		uptime := int64(time.Since(serverStartTime).Seconds())
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"app":               deps.Cfg.AppName,
+			"version":           "1.2.0",
+			"server_start_time": serverStartTime.Format(time.RFC3339),
+			"uptime_seconds":    uptime,
+		})
+	})
 
 	// Real-Time WebSocket
 	r.Get("/api/ws", deps.WSHub.ServeWS)

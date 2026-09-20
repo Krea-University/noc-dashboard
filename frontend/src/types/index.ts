@@ -515,3 +515,20 @@ export interface SyncExecuteResult {
   message: string;
 }
 
+export interface AppVersionInfo {
+  version: string;
+  buildId: string;
+  builtAt: string;
+}
+
+export interface BackendVersionInfo {
+  app: string;
+  version: string;
+  server_start_time: string;
+  uptime_seconds: number;
+}
+
+declare global {
+  const __APP_BUILD_ID__: string;
+  const __APP_VERSION__: string;
+}

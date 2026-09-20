@@ -1,15 +1,27 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette, Users, Lock, KeyRound, Loader2 } from 'lucide-react';
+import { Settings, Volume2, Sliders, Play, AlertTriangle, ShieldCheck, Check, Sun, Moon, Palette, Users, Lock, KeyRound, Loader2, Sparkles, RefreshCw, Clock, CheckCircle2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { SoundProfile } from '../../types';
 import { useTheme } from '../../context/ThemeContext';
+import { useAppUpdate } from '../../context/UpdateContext';
 
 export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
+  const {
+    currentBuildId,
+    currentVersion,
+    remoteVersion,
+    isUpdateAvailable,
+    remainingSeconds,
+    isChecking,
+    lastChecked,
+    checkForUpdate,
+    reloadApp,
+  } = useAppUpdate();
   const [simulationMsg, setSimulationMsg] = useState('');
   const [simLoading, setSimLoading] = useState(false);
   const [authSaving, setAuthSaving] = useState(false);
@@ -382,6 +394,92 @@ export const SettingsPage: React.FC = () => {
           <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
             <span className="text-slate-500 font-semibold block">OpManager Lite Device Category</span>
             <span className="text-slate-200 font-mono font-bold">Biometric Devices</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Software Version & Updates */}
+      <div className="noc-card p-5 space-y-4 border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400" /> Software Version & Auto-Update Engine
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Continuous delivery update checks, 10-minute automated display wall refresh, and build verification.
+            </p>
+          </div>
+
+          <button
+            onClick={() => checkForUpdate(true)}
+            disabled={isChecking}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 disabled:opacity-50 transition-colors self-start sm:self-auto cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isChecking ? 'animate-spin' : ''}`} />
+            <span>{isChecking ? 'Checking for Updates...' : 'Check for Updates'}</span>
+          </button>
+        </div>
+
+        {isUpdateAvailable ? (
+          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-amber-300">Software Update Available</span>
+                {remoteVersion && (
+                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-200 font-mono text-xs font-bold border border-amber-500/40">
+                    v{remoteVersion}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300">
+                A new build of KREA NOC Command Center has been deployed. Please reload the console to apply changes.
+              </p>
+              <div className="flex items-center gap-2 text-xs font-mono text-amber-400 pt-1">
+                <Clock className="w-3.5 h-3.5 animate-pulse" />
+                <span>
+                  Auto-reloading in: <strong>{String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}</strong>
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={reloadApp}
+              className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer self-start sm:self-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Reload Console Now</span>
+            </button>
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2.5 text-slate-300">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>You are running the latest version of KREA NOC Command Center.</span>
+            </div>
+            {lastChecked && (
+              <span className="text-slate-500 font-mono text-[11px] hidden sm:inline">
+                Last checked: {lastChecked.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono">
+          <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+            <span className="text-slate-500 font-sans font-semibold block text-[11px]">Installed Version</span>
+            <span className="text-slate-200 font-bold">v{currentVersion}</span>
+          </div>
+
+          <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+            <span className="text-slate-500 font-sans font-semibold block text-[11px]">Active Build ID</span>
+            <span className="text-slate-300 text-[11px] truncate block" title={currentBuildId}>
+              {currentBuildId}
+            </span>
+          </div>
+
+          <div className="p-3 rounded bg-slate-950 border border-slate-800 space-y-1">
+            <span className="text-slate-500 font-sans font-semibold block text-[11px]">Auto-Reload Policy</span>
+            <span className="text-slate-200">10 Minutes (600s)</span>
           </div>
         </div>
       </div>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, AlertTriangle, Search, User as UserIcon, LogOut, RefreshCw, Radio, Tv, Menu, Users, Shield, Settings } from 'lucide-react';
+import { Volume2, VolumeX, AlertTriangle, Search, User as UserIcon, LogOut, RefreshCw, Radio, Tv, Menu, Users, Shield, Settings, Sparkles } from 'lucide-react';
 import { soundManager } from '../../sound/SoundManager';
 import { SoundUnlockModal } from '../common/SoundUnlockModal';
 import { ThemeToggle } from '../common/ThemeToggle';
+import { useAppUpdate } from '../../context/UpdateContext';
 import { api } from '../../api/client';
 import { User, Integration } from '../../types';
 
@@ -31,6 +32,8 @@ export const OperatorHeader: React.FC<Props> = ({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(soundManager.isAudioUnlocked());
   const [isSoundActive, setIsSoundActive] = useState(soundManager.isSoundEnabled());
+
+  const { isUpdateAvailable, remainingSeconds, reloadApp, checkForUpdate, isChecking } = useAppUpdate();
 
   useEffect(() => {
     return soundManager.subscribe((unlocked, enabled) => {
@@ -215,6 +218,21 @@ export const OperatorHeader: React.FC<Props> = ({
           <Settings className="w-4 h-4" />
         </button>
 
+        {/* Update Available Badge */}
+        {isUpdateAvailable && (
+          <button
+            onClick={reloadApp}
+            title={`A software update is ready. Auto-reloads in ${Math.floor(remainingSeconds / 60)}m ${remainingSeconds % 60}s. Click to reload now.`}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-400 transition-colors animate-pulse cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Update Ready</span>
+            <span className="font-mono text-[11px] bg-amber-500/20 px-1 rounded">
+              {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:{String(remainingSeconds % 60).padStart(2, '0')}
+            </span>
+          </button>
+        )}
+
         {/* User Initials Avatar & Menu */}
         <div className="relative flex items-center gap-1.5 pl-1 sm:pl-2 border-l border-slate-800/80">
           <button
@@ -276,6 +294,20 @@ export const OperatorHeader: React.FC<Props> = ({
                 >
                   <Settings className="w-3.5 h-3.5 text-slate-400" />
                   <span>System Settings</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isChecking}
+                  onClick={async () => {
+                    await checkForUpdate(true);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isChecking ? 'animate-spin' : ''}`} />
+                    <span>Check for Updates</span>
+                  </div>
+                  {isChecking && <span className="text-[10px] text-cyan-400">Checking...</span>}
                 </button>
               </div>
 
