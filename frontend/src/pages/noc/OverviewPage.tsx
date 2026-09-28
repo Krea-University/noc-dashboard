@@ -50,7 +50,7 @@ export const OverviewPage: React.FC = () => {
 
   const { data: incidents } = useQuery({
     queryKey: ['incidents', 'recent'],
-    queryFn: api.getIncidents,
+    queryFn: () => api.getIncidents(),
     refetchInterval: 20000,
   });
 
@@ -403,8 +403,45 @@ export const OverviewPage: React.FC = () => {
     return { critical, major, warning, info };
   }, [displayIncidents, alarms]);
 
+  const downNetworkNodes = (summary?.network_devices_down ?? 0) || (summary?.switches_down ?? 0);
+  const isNetworkOutage = downNetworkNodes >= 3;
+
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-4 max-w-[1720px] mx-auto text-slate-200">
+      {/* Flood Protection Rule: Major Network Outage / Surge Alert Banner */}
+      {isNetworkOutage && (
+        <div className="p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-red-950/90 via-red-900/50 to-slate-900 border border-red-500/70 shadow-xl shadow-red-950/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-red-600/30 border border-red-500/50 text-red-300">
+              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-red-400">
+                  Critical Outage Surge Detected
+                </span>
+                <span className="px-2 py-0.5 rounded bg-red-500 text-white text-[10px] font-black uppercase font-mono">
+                  {downNetworkNodes} Nodes Unreachable
+                </span>
+              </div>
+              <p className="text-xs text-slate-200 mt-0.5">
+                Simultaneous network switch / backbone unreachable events detected across campus infrastructure.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:self-center self-start">
+            <button
+              onClick={() => navigate('/noc/network?status=DOWN')}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition-colors shadow-md shadow-red-600/30"
+            >
+              <span>Inspect Down Devices</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. TOP METRIC CARDS ROW (7 Compact Cards matching screenshot) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
         {/* Sites / ILL */}

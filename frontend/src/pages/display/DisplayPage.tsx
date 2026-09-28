@@ -122,7 +122,7 @@ export const DisplayPage: React.FC = () => {
 
   const { data: incidents } = useQuery({
     queryKey: ['display-incidents'],
-    queryFn: api.getIncidents,
+    queryFn: () => api.getIncidents(),
     refetchInterval: 10000,
   });
 

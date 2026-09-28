@@ -181,6 +181,8 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 
 		// Operator Actions & Alarm Management
 		api.Post("/api/alarms/{id}/acknowledge", handleAcknowledgeAlarm(deps))
+		api.Post("/api/alarms/bulk-acknowledge", handleBulkAcknowledgeAlarms(deps))
+		api.Post("/api/incidents", handleCreateIncident(deps))
 		api.Post("/api/incidents/{id}/status", handleUpdateIncidentStatus(deps))
 		api.Post("/api/incidents/{id}/notes", handleAddIncidentNote(deps))
 
@@ -1385,16 +1387,32 @@ func handleListAlarms(deps *RouterDeps) http.HandlerFunc {
 		sev := r.URL.Query().Get("severity")
 		cleared := r.URL.Query().Get("cleared")
 		status := r.URL.Query().Get("status")
-		query := "SELECT id, source_id, source_system, device_id, device_name, device_ip, severity, message, entity, first_seen_at, last_seen_at, acknowledged, cleared FROM alarms WHERE 1=1"
+		q := r.URL.Query().Get("q")
+		category := r.URL.Query().Get("category")
+
+		query := "SELECT a.id, a.source_id, a.source_system, a.device_id, a.device_name, a.device_ip, a.severity, a.message, a.entity, a.first_seen_at, a.last_seen_at, a.acknowledged, a.cleared FROM alarms a"
+		if category != "" && category != "ALL" {
+			query += " LEFT JOIN devices d ON a.device_id = d.id"
+		}
+		query += " WHERE 1=1"
 		var args []interface{}
-		if sev != "" {
-			query += " AND severity = ?"
+		if sev != "" && sev != "ALL" {
+			query += " AND a.severity = ?"
 			args = append(args, sev)
 		}
-		if cleared == "false" || cleared == "0" || status == "active" {
-			query += " AND cleared = 0 AND acknowledged = 0 AND severity != 'CLEAR'"
+		if category != "" && category != "ALL" {
+			query += " AND d.category_code = ?"
+			args = append(args, category)
 		}
-		query += " ORDER BY last_seen_at DESC LIMIT 100"
+		if cleared == "false" || cleared == "0" || status == "active" {
+			query += " AND a.cleared = 0 AND a.acknowledged = 0 AND a.severity != 'CLEAR'"
+		}
+		if q != "" {
+			query += " AND (a.device_name LIKE ? OR a.device_ip LIKE ? OR a.message LIKE ? OR a.entity LIKE ?)"
+			likeQ := "%" + q + "%"
+			args = append(args, likeQ, likeQ, likeQ, likeQ)
+		}
+		query += " ORDER BY a.last_seen_at DESC LIMIT 500"
 
 		rows, err := deps.DB.Query(query, args...)
 		if err != nil {
@@ -1459,12 +1477,117 @@ func handleAcknowledgeAlarm(deps *RouterDeps) http.HandlerFunc {
 	}
 }
 
+func handleBulkAcknowledgeAlarms(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := rbac.GetUserFromContext(r.Context())
+		now := time.Now().UTC()
+
+		username := "operator"
+		userID := "system"
+		if user != nil {
+			username = user.Username
+			userID = user.ID
+		}
+
+		var req struct {
+			AlarmIDs    []string `json:"alarm_ids"`
+			Severity    string   `json:"severity"`
+			AllCritical bool     `json:"all_critical"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+
+		var affected int64
+		if req.AllCritical || (req.Severity != "" && len(req.AlarmIDs) == 0) {
+			targetSev := "CRITICAL"
+			if req.Severity != "" {
+				targetSev = req.Severity
+			}
+			res, err := deps.DB.Exec(`
+				UPDATE alarms
+				SET acknowledged = 1,
+				    acknowledged_by = ?,
+				    acknowledged_at = ?,
+				    cleared = 1,
+				    cleared_at = COALESCE(cleared_at, ?)
+				WHERE severity = ? AND acknowledged = 0 AND cleared = 0`,
+				username, now, now, targetSev)
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, "failed acknowledging alarms: "+err.Error())
+				return
+			}
+			affected, _ = res.RowsAffected()
+		} else if len(req.AlarmIDs) > 0 {
+			for _, id := range req.AlarmIDs {
+				res, err := deps.DB.Exec(`
+					UPDATE alarms
+					SET acknowledged = 1,
+					    acknowledged_by = ?,
+					    acknowledged_at = ?,
+					    cleared = 1,
+					    cleared_at = COALESCE(cleared_at, ?)
+					WHERE id = ?`,
+					username, now, now, id)
+				if err == nil {
+					aff, _ := res.RowsAffected()
+					affected += aff
+				}
+			}
+		} else {
+			respondError(w, http.StatusBadRequest, "no alarms or criteria specified")
+			return
+		}
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:    userID,
+			Username:  username,
+			Action:    "ALARMS_BULK_ACKNOWLEDGED",
+			TargetID:  fmt.Sprintf("%d alarms", affected),
+			Reason:    fmt.Sprintf("Bulk acknowledged %d alarms by %s", affected, username),
+			Result:    "SUCCESS",
+			IPAddress: r.RemoteAddr,
+			UserAgent: r.UserAgent(),
+		})
+
+		deps.WSHub.Broadcast("ALARMS_BULK_ACKNOWLEDGED", map[string]interface{}{
+			"count":        affected,
+			"acknowledged": true,
+		})
+
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"status": "acknowledged",
+			"count":  affected,
+		})
+	}
+}
+
 func handleListIncidents(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := deps.DB.Query(`
-			SELECT id, incident_number, title, description, severity, status, source_system, primary_device_id, affected_devices_count, assigned_to_username, created_at, updated_at
-			FROM incidents
-			ORDER BY CASE status WHEN 'OPEN' THEN 1 WHEN 'INVESTIGATING' THEN 2 WHEN 'ACKNOWLEDGED' THEN 3 ELSE 4 END ASC, created_at DESC LIMIT 50`)
+		status := r.URL.Query().Get("status")
+		severity := r.URL.Query().Get("severity")
+		q := r.URL.Query().Get("q")
+
+		query := `SELECT id, incident_number, title, description, severity, status, source_system, primary_device_id, affected_devices_count, assigned_to_username, created_at, updated_at
+			FROM incidents WHERE 1=1`
+		var args []interface{}
+		if status != "" && status != "ALL" {
+			query += " AND status = ?"
+			args = append(args, status)
+		}
+		if severity != "" && severity != "ALL" {
+			query += " AND severity = ?"
+			args = append(args, severity)
+		}
+		if q != "" {
+			query += " AND (incident_number LIKE ? OR title LIKE ? OR description LIKE ?)"
+			likeQ := "%" + q + "%"
+			args = append(args, likeQ, likeQ, likeQ)
+		}
+		query += ` ORDER BY CASE status WHEN 'OPEN' THEN 1 WHEN 'INVESTIGATING' THEN 2 WHEN 'ACKNOWLEDGED' THEN 3 ELSE 4 END ASC, created_at DESC LIMIT 100`
+
+		rows, err := deps.DB.Query(query, args...)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -1482,6 +1605,87 @@ func handleListIncidents(deps *RouterDeps) http.HandlerFunc {
 			incidents = append(incidents, inc)
 		}
 		respondJSON(w, http.StatusOK, incidents)
+	}
+}
+
+func handleCreateIncident(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := rbac.GetUserFromContext(r.Context())
+		username := "operator"
+		userID := "system"
+		if user != nil {
+			username = user.Username
+			userID = user.ID
+		}
+
+		var req struct {
+			Title                string `json:"title"`
+			Description          string `json:"description"`
+			Severity             string `json:"severity"`
+			PrimaryDeviceID      string `json:"primary_device_id"`
+			AffectedDevicesCount int    `json:"affected_devices_count"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		req.Title = strings.TrimSpace(req.Title)
+		if req.Title == "" {
+			respondError(w, http.StatusBadRequest, "title is required")
+			return
+		}
+		if req.Severity == "" {
+			req.Severity = "MAJOR"
+		}
+		if req.AffectedDevicesCount <= 0 {
+			req.AffectedDevicesCount = 1
+		}
+
+		now := time.Now().UTC()
+		incID := "inc_" + uuid.New().String()
+		incNum := fmt.Sprintf("INC-%d-%04d", now.Year(), now.Unix()%10000)
+
+		_, err := deps.DB.Exec(`
+			INSERT INTO incidents (id, incident_number, title, description, severity, status, source_system, primary_device_id, affected_devices_count, assigned_to_user_id, assigned_to_username, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 'OPEN', 'manual', ?, ?, ?, ?, ?, ?)`,
+			incID, incNum, req.Title, req.Description, req.Severity, req.PrimaryDeviceID, req.AffectedDevicesCount, userID, username, now, now,
+		)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "failed creating incident: "+err.Error())
+			return
+		}
+
+		evID := "ev_" + uuid.New().String()
+		_, _ = deps.DB.Exec(`
+			INSERT INTO incident_events (id, incident_id, user_id, username, event_type, notes, created_at)
+			VALUES (?, ?, ?, ?, 'CREATED', ?, ?)`,
+			evID, incID, userID, username, "Manual operational incident logged by "+username, now,
+		)
+
+		_ = deps.AuditSvc.Log(r.Context(), &models.AuditLog{
+			UserID:    userID,
+			Username:  username,
+			Action:    "INCIDENT_CREATED",
+			TargetID:  incNum,
+			Reason:    req.Title,
+			Result:    "SUCCESS",
+			IPAddress: r.RemoteAddr,
+			UserAgent: r.UserAgent(),
+		})
+
+		deps.WSHub.Broadcast("INCIDENT_CREATED", map[string]interface{}{
+			"incident_id":     incID,
+			"incident_number": incNum,
+			"title":           req.Title,
+			"severity":        req.Severity,
+			"status":          "OPEN",
+		})
+
+		respondJSON(w, http.StatusCreated, map[string]interface{}{
+			"id":              incID,
+			"incident_number": incNum,
+			"status":          "created",
+		})
 	}
 }
 

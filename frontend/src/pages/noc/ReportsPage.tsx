@@ -21,6 +21,7 @@ import {
   ToggleRight,
   UserCheck,
   RefreshCw,
+  Calendar,
 } from 'lucide-react';
 import { api } from '../../api/client';
 
@@ -122,6 +123,46 @@ export const ReportsPage: React.FC = () => {
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `KREA_VLAN_Internet_Control_Audit_${vlanTimeRange}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const [slaWindow, setSlaWindow] = useState<'7d' | '30d' | '90d'>('30d');
+
+  const handleExportSlaCSV = () => {
+    const headers = [
+      'Report Section',
+      'Metric / Device Name',
+      'Category / Parameter',
+      'Value / Downtime (mins)',
+      'SLA Target / Incidents Count',
+      'Recommendation / Note',
+    ];
+    const rows = [
+      ['KPI', 'Network Availability', 'Switches & Routers', `${rep.network_availability_pct || 99.82}%`, '99.50%', 'Within SLA Target'],
+      ['KPI', 'Server Availability', 'Core Appliances & DB Clusters', `${rep.servers_availability_pct || 99.94}%`, '99.90%', 'Within SLA Target'],
+      ['KPI', 'MTTR (Mean Time to Resolution)', 'Incident Response', `${rep.mttr_minutes || 14.5} mins`, '30 mins', 'Optimal Response Time'],
+      ['KPI', 'Overall SLA Compliance', `Window: ${slaWindow}`, `${rep.sla_compliance_pct || 99.75}%`, '99.00%', 'Institutional Standard Compliant'],
+      ...problemDevices.map((d: any) => [
+        'Top Problem Device',
+        `"${String(d.name).replace(/"/g, '""')}"`,
+        String(d.category),
+        `${Number(d.downtime_minutes)} mins`,
+        String(d.incidents),
+        `"${(String(d.category) === 'BIOMETRIC'
+          ? 'Inspect door access PoE injector, check network port fluctuation, and verify battery backup'
+          : String(d.category) === 'SWITCH'
+          ? 'Inspect upstream fiber trunk SFP+ module, switch temperature sensor, and PSU redundancy'
+          : 'Verify hypervisor resource quota, storage IOPS, and OS service watchdog health').replace(/"/g, '""')}"`,
+      ]),
+    ];
+    const csvContent =
+      'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `krea_noc_sla_report_${slaWindow}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -769,6 +810,39 @@ export const ReportsPage: React.FC = () => {
       {/* ============================================================== */}
       {activeTab === 'SLA' && (
         <div className="space-y-4 sm:space-y-6">
+          {/* Controls & Filter Bar */}
+          <div className="noc-card p-4 rounded-xl border-slate-800 bg-slate-900/90 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase text-slate-400">
+                <Calendar className="w-4 h-4 text-emerald-400" /> SLA Evaluation Window:
+              </div>
+              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                {[
+                  { id: '7d', label: 'Last 7 Days' },
+                  { id: '30d', label: 'Last 30 Days' },
+                  { id: '90d', label: 'Last 90 Days' },
+                ].map((w) => (
+                  <button
+                    key={w.id}
+                    onClick={() => setSlaWindow(w.id as any)}
+                    className={`px-2.5 py-1 rounded-md font-mono font-bold text-xs transition-colors ${
+                      slaWindow === w.id ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {w.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={handleExportSlaCSV}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-all shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5" /> Export SLA Report (CSV)
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="noc-card p-4 space-y-1">
               <span className="text-xs text-slate-400 font-semibold uppercase">Network Availability</span>

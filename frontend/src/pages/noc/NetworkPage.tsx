@@ -1,7 +1,21 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Network, Search, Filter, ExternalLink, Activity, Wifi, Shield, ArrowLeft, ArrowRight, X } from 'lucide-react';
+import {
+  Network,
+  Search,
+  Filter,
+  ExternalLink,
+  Activity,
+  Wifi,
+  Shield,
+  ArrowLeft,
+  ArrowRight,
+  X,
+  Download,
+  Building2,
+  Layers,
+} from 'lucide-react';
 import { api } from '../../api/client';
 import { DeviceDrawer } from '../../components/common/DeviceDrawer';
 import { Device } from '../../types';
@@ -11,7 +25,10 @@ export const NetworkPage: React.FC = () => {
   const [category, setCategory] = useState<string>(searchParams.get('category') || 'NETWORK');
   const [status, setStatus] = useState<string>('');
   const [search, setSearch] = useState<string>('');
+  const [buildingFilter, setBuildingFilter] = useState<string>('ALL');
+  const [floorFilter, setFloorFilter] = useState<string>('ALL');
   const [page, setPage] = useState(1);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
 
   useEffect(() => {
     const cat = searchParams.get('category');
@@ -34,37 +51,123 @@ export const NetworkPage: React.FC = () => {
   };
 
   const pageSize = 30;
-  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
 
-  const { data: devices, isLoading } = useQuery({
+  const { data: rawDevices, isLoading } = useQuery({
     queryKey: ['devices', category, status, search],
     queryFn: () => api.getDevices(category || 'NETWORK', search || undefined, status || undefined),
     refetchInterval: 15000,
   });
 
-  const totalItems = devices?.length || 0;
+  // Dynamic building options from devices
+  const buildingOptions = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (rawDevices || []).forEach((d) => {
+      const bldg = d.building && d.building.trim() !== '' ? d.building.trim() : '-';
+      counts[bldg] = (counts[bldg] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => {
+      if (a[0] === '-') return 1;
+      if (b[0] === '-') return -1;
+      return b[1] - a[1];
+    });
+  }, [rawDevices]);
+
+  // Dynamic floor options from devices
+  const floorOptions = useMemo(() => {
+    const set = new Set<string>();
+    (rawDevices || []).forEach((d) => {
+      const f = d.floor && d.floor.trim() !== '' ? d.floor.trim() : '-';
+      set.add(f);
+    });
+    const order = ['GF', '1F', '2F', '3F', '4F', '-'];
+    return Array.from(set).sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [rawDevices]);
+
+  // Filtered devices by building and floor
+  const filteredDevices = useMemo(() => {
+    return (rawDevices || []).filter((d) => {
+      if (buildingFilter !== 'ALL') {
+        const b = d.building && d.building.trim() !== '' ? d.building.trim() : '-';
+        if (b !== buildingFilter) return false;
+      }
+      if (floorFilter !== 'ALL') {
+        const f = d.floor && d.floor.trim() !== '' ? d.floor.trim() : '-';
+        if (f !== floorFilter) return false;
+      }
+      return true;
+    });
+  }, [rawDevices, buildingFilter, floorFilter]);
+
+  const totalItems = filteredDevices.length;
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
   const currentPage = Math.min(page, totalPages);
 
   const paginatedDevices = useMemo(() => {
-    if (!devices) return [];
     const start = (currentPage - 1) * pageSize;
-    return devices.slice(start, start + pageSize);
-  }, [devices, currentPage, pageSize]);
+    return filteredDevices.slice(start, start + pageSize);
+  }, [filteredDevices, currentPage, pageSize]);
 
   const counts = useMemo(() => {
-    if (!devices) return { up: 0, down: 0, warning: 0 };
+    if (!filteredDevices) return { up: 0, down: 0, warning: 0 };
     return {
-      up: devices.filter((d) => d.status === 'UP').length,
-      down: devices.filter((d) => d.status === 'DOWN').length,
-      warning: devices.filter((d) => d.status === 'WARNING').length,
+      up: filteredDevices.filter((d) => d.status === 'UP').length,
+      down: filteredDevices.filter((d) => d.status === 'DOWN').length,
+      warning: filteredDevices.filter((d) => d.status === 'WARNING').length,
     };
-  }, [devices]);
+  }, [filteredDevices]);
+
+  const handleExportCSV = () => {
+    if (!filteredDevices || filteredDevices.length === 0) return;
+    const headers = [
+      'Status',
+      'Device Name',
+      'IP Address',
+      'Building',
+      'Floor',
+      'Category',
+      'Type',
+      'Vendor & Model',
+      'Availability %',
+      'Response Time (ms)',
+      'CPU %',
+      'Memory %',
+    ];
+    const rows = filteredDevices.map((d) => [
+      d.status,
+      `"${(d.name || '').replace(/"/g, '""')}"`,
+      d.ip_address || '',
+      `"${(d.building || '-').replace(/"/g, '""')}"`,
+      `"${(d.floor || '-').replace(/"/g, '""')}"`,
+      d.category_code,
+      d.type || '',
+      `"${((d.vendor || '') + ' ' + (d.model || '')).trim().replace(/"/g, '""')}"`,
+      d.availability_pct || 100,
+      d.response_time_ms || 0,
+      Math.round(d.cpu_pct || 0),
+      Math.round(d.mem_pct || 0),
+    ]);
+    const csvContent =
+      'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `krea_noc_network_inventory_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header & Filter Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-lg sm:text-xl font-black text-slate-100 flex items-center gap-2.5">
             <Network className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" /> Network Infrastructure
@@ -75,6 +178,7 @@ export const NetworkPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          {/* Search Input */}
           <div className="relative flex-1 sm:flex-none">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
             <input
@@ -85,7 +189,7 @@ export const NetworkPage: React.FC = () => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="pl-9 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:border-blue-500 focus:outline-none w-full sm:w-56"
+              className="pl-9 pr-8 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 focus:border-blue-500 focus:outline-none w-full sm:w-52"
             />
             {search && (
               <button
@@ -97,19 +201,62 @@ export const NetworkPage: React.FC = () => {
             )}
           </div>
 
+          {/* Building Filter */}
+          <select
+            value={buildingFilter}
+            onChange={(e) => {
+              setBuildingFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-blue-500 focus:outline-none cursor-pointer"
+          >
+            <option value="ALL">All Buildings</option>
+            {buildingOptions.map(([bldg, cnt]) => (
+              <option key={bldg} value={bldg}>
+                {bldg === '-' ? 'Unassigned (-)' : bldg} ({cnt})
+              </option>
+            ))}
+          </select>
+
+          {/* Floor Filter */}
+          <select
+            value={floorFilter}
+            onChange={(e) => {
+              setFloorFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-blue-500 focus:outline-none cursor-pointer"
+          >
+            <option value="ALL">All Floors</option>
+            {floorOptions.map((flr) => (
+              <option key={flr} value={flr}>
+                {flr === '-' ? 'No Floor (-)' : flr}
+              </option>
+            ))}
+          </select>
+
+          {/* Status Filter */}
           <select
             value={status}
             onChange={(e) => {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-blue-500 focus:outline-none cursor-pointer"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:border-blue-500 focus:outline-none cursor-pointer"
           >
             <option value="">All Statuses</option>
             <option value="UP">UP Only</option>
             <option value="DOWN">DOWN Only</option>
             <option value="WARNING">Warning</option>
           </select>
+
+          {/* Export CSV Button */}
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" /> CSV
+          </button>
         </div>
       </div>
 
@@ -136,7 +283,9 @@ export const NetworkPage: React.FC = () => {
         ))}
 
         <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2.5 sm:gap-4 text-xs font-mono pt-1 sm:pt-0">
-          <span className="text-slate-400">Total: <strong className="text-slate-200">{totalItems}</strong></span>
+          <span className="text-slate-400">
+            Filtered Total: <strong className="text-slate-200">{totalItems}</strong>
+          </span>
           <span className="text-emerald-400 font-bold">{counts.up} UP</span>
           <span className="text-red-400 font-bold">{counts.down} DOWN</span>
           {counts.warning > 0 && <span className="text-amber-400 font-bold">{counts.warning} WARN</span>}

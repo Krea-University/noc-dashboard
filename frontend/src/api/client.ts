@@ -121,9 +121,11 @@ export const api = {
       method: 'DELETE',
     }),
 
-  getAlarms: (severity?: string, cleared?: boolean | string) => {
+  getAlarms: (severity?: string, cleared?: boolean | string, q?: string, category?: string) => {
     const params = new URLSearchParams();
     if (severity) params.set('severity', severity);
+    if (category) params.set('category', category);
+    if (q) params.set('q', q);
     if (cleared !== undefined) {
       if (typeof cleared === 'boolean') {
         params.set('cleared', cleared ? 'true' : 'false');
@@ -135,9 +137,32 @@ export const api = {
   },
   acknowledgeAlarm: (id: string) =>
     request<{ status: string }>(`/alarms/${id}/acknowledge`, { method: 'POST' }),
+  bulkAcknowledgeAlarms: (payload: { alarm_ids?: string[]; severity?: string; all_critical?: boolean }) =>
+    request<{ status: string; count: number }>('/alarms/bulk-acknowledge', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
-  getIncidents: () => request<Incident[]>('/incidents'),
+  getIncidents: (status?: string, severity?: string, q?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (severity) params.set('severity', severity);
+    if (q) params.set('q', q);
+    const queryString = params.toString();
+    return request<Incident[]>(`/incidents${queryString ? `?${queryString}` : ''}`);
+  },
   getIncident: (id: string) => request<Incident>(`/incidents/${id}`),
+  createIncident: (data: {
+    title: string;
+    description: string;
+    severity: string;
+    primary_device_id?: string;
+    affected_devices_count?: number;
+  }) =>
+    request<{ id: string; incident_number: string; status: string }>('/incidents', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   updateIncidentStatus: (id: string, status: string) =>
     request<{ status: string }>(`/incidents/${id}/status`, {
       method: 'POST',
