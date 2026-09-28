@@ -201,6 +201,7 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		// Infrastructure Full Sync & Reconciliation
 		api.Get("/api/infrastructure/sync/preview", handleInfrastructureSyncPreview(deps))
 		api.Post("/api/infrastructure/sync/execute", handleInfrastructureSyncExecute(deps))
+		api.Post("/api/infrastructure/sync/flush", handleInfrastructureSyncFlush(deps))
 		api.Get("/api/vlans/{id}", handleGetVLAN(deps))
 		api.Get("/api/vlans/{id}/impact", handleGetVLANImpact(deps))
 		api.Post("/api/vlans/{id}/internet/disable", handleDisableVlanInternet(deps))
@@ -615,12 +616,12 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 			DataFreshness:       "LIVE",
 		}
 
-		// Query devices counts
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='WARNING' THEN 1 ELSE 0 END), 0) FROM devices").
+		// Query devices counts (excluding DECOMMISSIONED)
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='WARNING' THEN 1 ELSE 0 END), 0) FROM devices WHERE status != 'DECOMMISSIONED'").
 			Scan(&summary.TotalDevices, &summary.DevicesUp, &summary.DevicesDown, &summary.DevicesWarning)
 
 		// Query network devices
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code IN ('SWITCH','ROUTER','WIRELESS_AP','ILL')").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code IN ('SWITCH','ROUTER','WIRELESS_AP','ILL') AND status != 'DECOMMISSIONED'").
 			Scan(&summary.NetworkDevicesTotal, &summary.NetworkDevicesUp, &summary.NetworkDevicesDown)
 
 		// Calculate live availability dynamically
@@ -632,19 +633,19 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 		}
 
 		// Query switches
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE (category_code = 'SWITCH' AND type NOT LIKE '%AP%' AND type NOT LIKE '%Access Point%' AND type NOT LIKE '%Aruba%' AND type NOT LIKE '%Ruckus%' AND type NOT LIKE '%Firewall%' AND name NOT LIKE '%_AP')").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE (category_code = 'SWITCH' AND type NOT LIKE '%AP%' AND type NOT LIKE '%Access Point%' AND type NOT LIKE '%Aruba%' AND type NOT LIKE '%Ruckus%' AND type NOT LIKE '%Firewall%' AND name NOT LIKE '%_AP') AND status != 'DECOMMISSIONED'").
 			Scan(&summary.SwitchesTotal, &summary.SwitchesUp, &summary.SwitchesDown)
 
 		// Query wireless APs
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE (category_code = 'WIRELESS_AP' OR type LIKE '%AP%' OR type LIKE '%Access Point%' OR type LIKE '%Aruba%' OR type LIKE '%Ruckus%' OR name LIKE '%_AP')").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE (category_code = 'WIRELESS_AP' OR type LIKE '%AP%' OR type LIKE '%Access Point%' OR type LIKE '%Aruba%' OR type LIKE '%Ruckus%' OR name LIKE '%_AP') AND status != 'DECOMMISSIONED'").
 			Scan(&summary.WirelessAPsTotal, &summary.WirelessAPsUp, &summary.WirelessAPsDown)
 
 		// Query ILL
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'ILL' OR type LIKE '%Leased Line%'").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0) FROM devices WHERE (category_code = 'ILL' OR type LIKE '%Leased Line%') AND status != 'DECOMMISSIONED'").
 			Scan(&summary.ILLTotal, &summary.ILLUp)
 
 		// Query servers (SNMP monitored appliances + real server workloads from Endpoint Central)
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'SERVER'").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'SERVER' AND status != 'DECOMMISSIONED'").
 			Scan(&summary.ServersTotal, &summary.ServersUp, &summary.ServersDown)
 		var epSrvTotal, epSrvOnline, epSrvOffline int
 		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='ONLINE' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status!='ONLINE' THEN 1 ELSE 0 END), 0) FROM endpoints WHERE os_name LIKE '%Server%'").
@@ -654,7 +655,7 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 		summary.ServersDown += epSrvOffline
 
 		// Query biometrics
-		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'BIOMETRIC'").
+		_ = deps.DB.QueryRow("SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='UP' THEN 1 ELSE 0 END), 0), COALESCE(SUM(CASE WHEN status='DOWN' THEN 1 ELSE 0 END), 0) FROM devices WHERE category_code = 'BIOMETRIC' AND status != 'DECOMMISSIONED'").
 			Scan(&summary.BiometricsTotal, &summary.BiometricsUp, &summary.BiometricsDown)
 
 		// Query endpoints
@@ -695,8 +696,8 @@ func handleDashboardSummary(deps *RouterDeps) http.HandlerFunc {
 
 func handleDashboardNetwork(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		devices, _ := queryDevices(deps.DB, "category_code IN ('SWITCH','ROUTER','WIRELESS_AP','ILL')", 100)
-		interfaces, _ := queryInterfaces(deps.DB, 20)
+		devices, _ := queryDevices(deps.DB, "category_code IN ('SWITCH','ROUTER','WIRELESS_AP','ILL') AND status != 'DECOMMISSIONED'", 500)
+		interfaces, _ := queryInterfaces(deps.DB, 50)
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"devices":    devices,
 			"interfaces": interfaces,
@@ -706,11 +707,11 @@ func handleDashboardNetwork(deps *RouterDeps) http.HandlerFunc {
 
 func handleDashboardServers(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		servers, _ := queryDevices(deps.DB, "category_code = 'SERVER'", 50)
+		servers, _ := queryDevices(deps.DB, "category_code = 'SERVER' AND status != 'DECOMMISSIONED'", 200)
 		if servers == nil {
 			servers = []models.Device{}
 		}
-		serverEndpoints, _ := queryEndpoints(deps.DB, "os_name LIKE '%Server%'", 20)
+		serverEndpoints, _ := queryEndpoints(deps.DB, "os_name LIKE '%Server%'", 100)
 		if serverEndpoints == nil {
 			serverEndpoints = []models.Endpoint{}
 		}
@@ -732,7 +733,7 @@ func handleDashboardEndpoints(deps *RouterDeps) http.HandlerFunc {
 
 func handleDashboardBiometrics(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		biometrics, _ := queryDevices(deps.DB, "category_code = 'BIOMETRIC'", 200)
+		biometrics, _ := queryDevices(deps.DB, "category_code = 'BIOMETRIC' AND status != 'DECOMMISSIONED'", 1000)
 		respondJSON(w, http.StatusOK, map[string]interface{}{
 			"biometrics": biometrics,
 		})
@@ -773,6 +774,8 @@ func handleListDevices(deps *RouterDeps) http.HandlerFunc {
 		}
 		if status != "" {
 			conditions = append(conditions, fmt.Sprintf("status = '%s'", sanitizeSQL(status)))
+		} else {
+			conditions = append(conditions, "status != 'DECOMMISSIONED'")
 		}
 		if search != "" {
 			s := sanitizeSQL(search)
@@ -1058,7 +1061,7 @@ func handleUpdateDeviceNotes(deps *RouterDeps) http.HandlerFunc {
 
 func handleListBiometrics(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		devices, err := queryDevices(deps.DB, "category_code = 'BIOMETRIC'", 100)
+		devices, err := queryDevices(deps.DB, "category_code = 'BIOMETRIC' AND status != 'DECOMMISSIONED'", 1000)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -2045,6 +2048,31 @@ func handleInfrastructureSyncExecute(deps *RouterDeps) http.HandlerFunc {
 		result, err := engine.ExecuteSync(r.Context(), &req, username, userID, r.RemoteAddr, r.UserAgent())
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed executing infrastructure sync: %v", err))
+			return
+		}
+		respondJSON(w, http.StatusOK, result)
+	}
+}
+
+func handleInfrastructureSyncFlush(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Reason string `json:"reason"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		user := rbac.GetUserFromContext(r.Context())
+		username := "system"
+		userID := ""
+		if user != nil {
+			username = user.Username
+			userID = user.ID
+		}
+
+		engine := getSyncEngine(deps)
+		result, err := engine.FullFlushOpManager(r.Context(), username, userID, r.RemoteAddr, r.UserAgent(), req.Reason)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("failed executing full flush: %v", err))
 			return
 		}
 		respondJSON(w, http.StatusOK, result)

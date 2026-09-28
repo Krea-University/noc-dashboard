@@ -646,3 +646,145 @@ func (e *SyncReconciliationEngine) BackfillDeviceCustomFields(ctx context.Contex
 	slog.Info("opmanager custom fields backfill finished", "devices_processed", len(devList), "devices_updated", updatedTotal)
 	return updatedTotal, nil
 }
+
+// FullFlushOpManager purges all existing OpManager device records and re-syncs only live devices actively reported by OpManager.
+func (e *SyncReconciliationEngine) FullFlushOpManager(ctx context.Context, actorName, actorID, ip, ua, reason string) (*SyncExecuteResult, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	startTime := time.Now().UTC()
+	jobID := "FLUSH-" + startTime.Format("20060102-150405") + "-" + uuid.New().String()[:4]
+
+	cleanReason := strings.TrimSpace(reason)
+	if cleanReason == "" {
+		cleanReason = "Full flush and clean re-sync of active devices from OpManager"
+	}
+
+	// 1. Fetch live active devices from OpManager first (safety circuit breaker)
+	liveDevices, err := e.nmsProvider.GetDevices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot flush database: failed fetching devices from OpManager: %w", err)
+	}
+	if len(liveDevices) == 0 {
+		return nil, fmt.Errorf("cannot flush database: OpManager returned 0 devices (safety circuit-breaker prevented purge)")
+	}
+
+	// Also fetch live alarms
+	liveAlarms, _ := e.nmsProvider.GetAlarms(ctx)
+
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed starting flush transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 2. Count existing records before flush
+	var oldDeviceCount int
+	_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM devices WHERE source_system = 'opmanager' OR source_system IS NULL OR source_system = ''").Scan(&oldDeviceCount)
+
+	// 3. Purge existing OpManager devices, interfaces, alarms, and biometric metadata
+	_, _ = tx.ExecContext(ctx, "DELETE FROM alarms WHERE source_system = 'opmanager' OR source_system IS NULL OR source_system = ''")
+	_, _ = tx.ExecContext(ctx, "DELETE FROM interfaces WHERE device_id IN (SELECT id FROM devices WHERE source_system = 'opmanager' OR source_system IS NULL OR source_system = '')")
+	_, _ = tx.ExecContext(ctx, "DELETE FROM biometric_metadata WHERE device_id IN (SELECT id FROM devices WHERE source_system = 'opmanager' OR source_system IS NULL OR source_system = '')")
+	_, err = tx.ExecContext(ctx, "DELETE FROM devices WHERE source_system = 'opmanager' OR source_system IS NULL OR source_system = ''")
+	if err != nil {
+		return nil, fmt.Errorf("failed purging devices: %w", err)
+	}
+
+	now := time.Now().UTC()
+	insertedCount := 0
+
+	// 4. Insert only live devices directly from OpManager
+	for _, dto := range liveDevices {
+		devID := "dev_" + uuid.New().String()[:8]
+		bldg := dto.Building
+		if bldg == "" {
+			bldg = "-"
+		}
+		flr := dto.Floor
+		if flr == "" {
+			flr = "-"
+		}
+
+		insertSQL := `
+			INSERT INTO devices (
+				id, source_id, source_system, name, ip_address, category_code,
+				building, floor, type, vendor, model, status, availability_pct, response_time_ms,
+				cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, created_at, updated_at
+			) VALUES (?, ?, 'opmanager', ?, ?, ?, ?, ?, ?, ?, ?, ?, 100.0, ?, 0.0, 0.0, 0.0, ?, ?, ?, ?)`
+		_, err := tx.ExecContext(ctx, insertSQL,
+			devID, dto.SourceID, dto.Name, dto.IPAddress, dto.CategoryCode,
+			bldg, flr, dto.Type, dto.Vendor, dto.Model, dto.Status, dto.ResponseTimeMS,
+			now, now, now, now,
+		)
+		if err != nil {
+			slog.Error("failed inserting live device during full flush", "name", dto.Name, "error", err)
+			continue
+		}
+		insertedCount++
+
+		// If biometric, create biometric_metadata entry
+		if dto.CategoryCode == "BIOMETRIC" {
+			bmID := "bm_" + uuid.New().String()[:8]
+			_, _ = tx.ExecContext(ctx, `
+				INSERT INTO biometric_metadata (id, device_id, vendor, model, building, floor, location, department, purpose, contact_person, notes, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, '-', '-', 'Biometric Attendance', '-', 'OpManager Live Discovery', ?)`,
+				bmID, devID, dto.Vendor, dto.Model, bldg, flr, now,
+			)
+		}
+	}
+
+	// 5. Insert live alarms
+	for _, a := range liveAlarms {
+		almID := "alm_" + uuid.New().String()[:8]
+		_, _ = tx.ExecContext(ctx, `
+			INSERT INTO alarms (id, source_id, source_system, device_name, device_ip, severity, message, entity, first_seen_at, last_seen_at, acknowledged, cleared)
+			VALUES (?, ?, 'opmanager', ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+			almID, a.SourceID, a.DeviceName, a.DeviceIP, a.Severity, a.Message, a.Entity, now, now,
+		)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed committing flush transaction: %w", err)
+	}
+
+	completedTime := time.Now().UTC()
+	durationMs := completedTime.Sub(startTime).Milliseconds()
+
+	summaryMsg := fmt.Sprintf("Full flush complete: Purged %d old devices, synced %d live active devices from OpManager",
+		oldDeviceCount, insertedCount)
+
+	// Audit Log
+	_ = e.auditSvc.Log(ctx, &models.AuditLog{
+		UserID:     actorID,
+		Username:   actorName,
+		Action:     "FULL_FLUSH_OPMANAGER_SYNC",
+		TargetType: "INFRASTRUCTURE",
+		TargetID:   jobID,
+		Reason:     cleanReason,
+		Result:     "SUCCESS",
+		IPAddress:  ip,
+		UserAgent:  ua,
+	})
+
+	e.wsHub.Broadcast("INFRASTRUCTURE_FLUSHED", map[string]interface{}{
+		"job_id":        jobID,
+		"flushed_count": oldDeviceCount,
+		"synced_count":  insertedCount,
+		"status":        "COMPLETED",
+		"timestamp":     completedTime,
+	})
+
+	return &SyncExecuteResult{
+		JobID:        jobID,
+		StartedAt:    startTime,
+		CompletedAt:  completedTime,
+		DurationMs:   durationMs,
+		Status:       "SUCCESS",
+		AddedCount:   insertedCount,
+		UpdatedCount: 0,
+		RemovedCount: oldDeviceCount,
+		RemoveMode:   "purge",
+		Message:      summaryMsg,
+	}, nil
+}

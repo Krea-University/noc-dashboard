@@ -149,3 +149,59 @@ func TestInfrastructureSyncExecuteAPI(t *testing.T) {
 	t.Logf("Sync executed successfully: JobID=%s, Added=%d, Updated=%d, DBTotal=%d",
 		result.JobID, result.AddedCount, result.UpdatedCount, count)
 }
+
+func TestInfrastructureSyncFlushAPI(t *testing.T) {
+	router, db, token := setupSyncTestRouter(t)
+
+	// Pre-insert a decommissioned dummy device to test that it gets purged
+	_, err := db.Exec(`INSERT INTO devices (id, source_id, source_system, name, ip_address, category_code, building, floor, type, vendor, model, status, availability_pct, response_time_ms, cpu_pct, mem_pct, disk_pct, last_seen_at, last_status_change_at, created_at, updated_at)
+		VALUES ('dev_decom_1', 'old_999', 'opmanager', 'Old-Decommissioned-Switch', '10.0.99.99', 'SWITCH', 'Admin', '1', 'Switch', 'Cisco', '2960', 'DECOMMISSIONED', 0.0, 0, 0.0, 0.0, 0.0, datetime('now'), datetime('now'), datetime('now'), datetime('now'))`)
+	if err != nil {
+		t.Fatalf("failed inserting dummy decommissioned device: %v", err)
+	}
+
+	flushPayload := map[string]string{
+		"reason": "Automated test full flush and active re-sync",
+	}
+	body, _ := json.Marshal(flushPayload)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/infrastructure/sync/flush", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var result automation.SyncExecuteResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed unmarshaling flush response: %v", err)
+	}
+
+	if result.Status != "SUCCESS" {
+		t.Errorf("expected SUCCESS status, got %s", result.Status)
+	}
+	if result.AddedCount == 0 {
+		t.Errorf("expected live devices to be imported from OpManager, got added=%d", result.AddedCount)
+	}
+
+	// Verify old decommissioned device was purged
+	var decomCount int
+	_ = db.QueryRow("SELECT COUNT(*) FROM devices WHERE id = 'dev_decom_1'").Scan(&decomCount)
+	if decomCount != 0 {
+		t.Errorf("expected old decommissioned device to be purged, but found count=%d", decomCount)
+	}
+
+	// Verify active devices exist
+	var activeCount int
+	_ = db.QueryRow("SELECT COUNT(*) FROM devices WHERE status != 'DECOMMISSIONED'").Scan(&activeCount)
+	if activeCount == 0 {
+		t.Errorf("expected active devices after flush, got %d", activeCount)
+	}
+
+	t.Logf("Flush executed successfully: JobID=%s, Flushed=%d, SyncedActive=%d",
+		result.JobID, result.RemovedCount, result.AddedCount)
+}

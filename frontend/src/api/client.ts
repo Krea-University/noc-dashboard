@@ -208,6 +208,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+  flushSync: (reason?: string) =>
+    request<SyncExecuteResult>('/infrastructure/sync/flush', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
 
   // Audit & Reports
   getAuditLogs: (action?: string, username?: string) => {
