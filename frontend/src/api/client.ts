@@ -3,6 +3,7 @@ import {
   VLAN, ActionJob, ImpactEstimate, AuditLog, SoundProfile,
   DisplayDevice, DashboardSummary, ProblemDevice, AvailabilityReport,
   VlanLogsReportResponse, SyncPreviewResult, SyncExecuteRequest, SyncExecuteResult,
+  ZoomMeetingsResponse,
 } from '../types';
 
 const API_BASE = '/api';
@@ -69,6 +70,24 @@ export const api = {
   getServerDashboard: () => request<{ servers: Device[]; server_endpoints?: Endpoint[] }>('/dashboard/servers'),
   getEndpointDashboard: () => request<{ endpoints: Endpoint[] }>('/dashboard/endpoints'),
   getBiometricDashboard: () => request<{ biometrics: Device[] }>('/dashboard/biometrics'),
+
+  // Zoom Meetings Integration
+  getZoomMeetings: (filters?: {
+    to_time?: string;
+    hours?: number;
+    status?: string;
+    from?: string;
+    to_date?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters?.to_time) params.set('to_time', filters.to_time);
+    if (filters?.hours) params.set('hours', filters.hours.toString());
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.from) params.set('from', filters.from);
+    if (filters?.to_date) params.set('to_date', filters.to_date);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return request<ZoomMeetingsResponse>(`/zoom/meetings${qs}`);
+  },
 
   // Devices
   getDevices: (category?: string, search?: string, status?: string) => {

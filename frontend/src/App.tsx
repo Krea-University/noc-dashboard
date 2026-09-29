@@ -22,6 +22,7 @@ import { AuditPage } from './pages/noc/AuditPage';
 import { UsersPage } from './pages/noc/UsersPage';
 import { SettingsPage } from './pages/noc/SettingsPage';
 import { SyncPage } from './pages/noc/SyncPage';
+import { ZoomMeetingsPage } from './pages/noc/ZoomMeetingsPage';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { UpdateProvider } from './context/UpdateContext';
 import { UpdateNotificationBanner } from './components/common/UpdateNotificationBanner';
@@ -87,6 +88,7 @@ export function App() {
           <Route path="servers" element={<ServersPage />} />
           <Route path="endpoints" element={<EndpointsPage />} />
           <Route path="biometrics" element={<BiometricsPage />} />
+          <Route path="meetings" element={<ZoomMeetingsPage />} />
           <Route path="alarms" element={<AlarmsPage />} />
           <Route path="incidents" element={<IncidentsPage />} />
           <Route path="vlan" element={<VlanControlPage />} />

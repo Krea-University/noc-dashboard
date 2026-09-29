@@ -51,6 +51,11 @@ type Config struct {
 	// Biometric
 	BiometricDeviceGroup string
 
+	// Zoom Pool Manager Integration
+	ZoomNOCURL                 string
+	ZoomNOCToken               string
+	PollZoomMeetingsInterval   time.Duration
+
 	// Polling Intervals
 	PollOpManagerDevicesInterval time.Duration
 	PollOpManagerAlarmsInterval  time.Duration
@@ -132,6 +137,10 @@ func Load(envPath string) (*Config, error) {
 		FortiGateVerifyTLS: getEnvBool("FORTIGATE_VERIFY_TLS", false),
 
 		BiometricDeviceGroup: getEnv("BIOMETRIC_DEVICE_GROUP", "Biometric Devices"),
+
+		ZoomNOCURL:               getEnv("ZOOM_NOC_URL", "https://zoom.krea.edu.in/api/v1/noc/meetings"),
+		ZoomNOCToken:             getEnv("ZOOM_NOC_TOKEN", ""),
+		PollZoomMeetingsInterval: time.Duration(getEnvInt("POLL_ZOOM_MEETINGS_SECONDS", 30)) * time.Second,
 
 		PollOpManagerDevicesInterval: time.Duration(getEnvInt("POLL_OPMANAGER_DEVICES_SECONDS", 60)) * time.Second,
 		PollOpManagerAlarmsInterval:  time.Duration(getEnvInt("POLL_OPMANAGER_ALARMS_SECONDS", 30)) * time.Second,

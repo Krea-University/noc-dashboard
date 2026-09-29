@@ -15,6 +15,7 @@ import (
 	"github.com/Krea-University/noc-dashboard/backend/internal/events"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations"
 	"github.com/Krea-University/noc-dashboard/backend/internal/models"
+	"github.com/Krea-University/noc-dashboard/backend/internal/websocket"
 )
 
 // CollectorManager coordinates periodic polling of external infrastructure providers.
@@ -25,6 +26,8 @@ type CollectorManager struct {
 	nmsProvider  integrations.NMSProvider
 	epcProvider  integrations.EndpointProvider
 	fgProvider   integrations.FirewallProvider
+	zoomProvider integrations.ZoomProvider
+	wsHub        *websocket.Hub
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 }
@@ -37,6 +40,8 @@ func NewManager(
 	nms integrations.NMSProvider,
 	epc integrations.EndpointProvider,
 	fg integrations.FirewallProvider,
+	zoom integrations.ZoomProvider,
+	wsHub *websocket.Hub,
 ) *CollectorManager {
 	return &CollectorManager{
 		cfg:          cfg,
@@ -45,6 +50,8 @@ func NewManager(
 		nmsProvider:  nms,
 		epcProvider:  epc,
 		fgProvider:   fg,
+		zoomProvider: zoom,
+		wsHub:        wsHub,
 		stopChan:     make(chan struct{}),
 	}
 }
@@ -64,6 +71,11 @@ func (m *CollectorManager) Start() {
 
 	m.wg.Add(1)
 	go m.runServerTelemetryCollector()
+
+	if m.zoomProvider != nil {
+		m.wg.Add(1)
+		go m.runZoomCollector()
+	}
 }
 
 // Stop signals all collectors to terminate gracefully.
@@ -457,3 +469,46 @@ func (m *CollectorManager) updateServerTelemetry() {
 		    updated_at = ?
 		WHERE category_code = 'SERVER'`, now, now)
 }
+
+func (m *CollectorManager) runZoomCollector() {
+	defer m.wg.Done()
+	if m.zoomProvider == nil {
+		return
+	}
+
+	interval := m.cfg.PollZoomMeetingsInterval
+	if interval < 5*time.Second {
+		interval = 30 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Initial sync
+	m.syncZoom()
+
+	for {
+		select {
+		case <-m.stopChan:
+			return
+		case <-ticker.C:
+			m.syncZoom()
+		}
+	}
+}
+
+func (m *CollectorManager) syncZoom() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	data, err := m.zoomProvider.GetMeetings(ctx, map[string]string{
+		"hours": "48",
+	})
+	if err != nil {
+		slog.Warn("zoom meetings collector warning", "error", err)
+	}
+
+	if data != nil && m.wsHub != nil {
+		m.wsHub.Broadcast("ZOOM_MEETINGS_UPDATED", data)
+	}
+}
+

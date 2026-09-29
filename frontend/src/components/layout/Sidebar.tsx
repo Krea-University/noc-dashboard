@@ -16,6 +16,7 @@ import {
   Building2,
   X,
   RefreshCw,
+  Video,
 } from 'lucide-react';
 
 interface Props {
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<Props> = ({
     { label: 'Wireless (APs)', to: '/noc/network?category=WIRELESS_AP', icon: Wifi },
     { label: 'Endpoints', to: '/noc/endpoints', icon: Laptop },
     { label: 'Biometric Devices', to: '/noc/biometrics', icon: Fingerprint },
+    { label: 'Zoom Meetings', to: '/noc/meetings', icon: Video },
     { label: 'VLAN Manager', to: '/noc/vlan', icon: Layers },
     { label: 'Full Infra Sync', to: '/noc/sync', icon: RefreshCw },
     {

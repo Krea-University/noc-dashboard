@@ -46,6 +46,7 @@ type RouterDeps struct {
 	NMSProvider  integrations.NMSProvider
 	EPCProvider  integrations.EndpointProvider
 	FGProvider   integrations.FirewallProvider
+	ZoomProvider integrations.ZoomProvider
 }
 
 // SetupRouter constructs the Chi router with middleware, security headers, and routes.
@@ -161,6 +162,9 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 
 		// Firewall & WAN Status (Read-Only)
 		api.Get("/api/firewall", handleGetFirewallStatus(deps))
+
+		// Zoom Meetings Integration (Read-Only)
+		api.Get("/api/zoom/meetings", handleGetZoomMeetings(deps))
 
 		// NOC Displays
 		api.Get("/api/displays", handleListDisplays(deps))
@@ -2246,6 +2250,42 @@ func handleGetFirewallStatus(deps *RouterDeps) http.HandlerFunc {
 		respondJSON(w, http.StatusOK, status)
 	}
 }
+
+func handleGetZoomMeetings(deps *RouterDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.ZoomProvider == nil {
+			respondJSON(w, http.StatusOK, map[string]interface{}{
+				"success":        true,
+				"total_count":    0,
+				"live_count":     0,
+				"upcoming_count": 0,
+				"meetings":       []interface{}{},
+				"is_stale":       false,
+			})
+			return
+		}
+
+		params := make(map[string]string)
+		for _, key := range []string{"from", "to_time", "to_date", "next_date", "hours", "status"} {
+			if v := r.URL.Query().Get(key); v != "" {
+				params[key] = v
+			}
+		}
+
+		// If no specific window is passed, default to hours=48 (today & tomorrow)
+		if len(params) == 0 {
+			params["hours"] = "48"
+		}
+
+		meetings, err := deps.ZoomProvider.GetMeetings(r.Context(), params)
+		if err != nil && meetings == nil {
+			respondError(w, http.StatusInternalServerError, "failed fetching zoom meetings: "+err.Error())
+			return
+		}
+		respondJSON(w, http.StatusOK, meetings)
+	}
+}
+
 
 func handleListActions(deps *RouterDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

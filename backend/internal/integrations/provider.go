@@ -138,3 +138,70 @@ type FirewallProvider interface {
 	VerifyInternetState(ctx context.Context, vlanID int, policyID int) (expectedStatus string, isVerified bool, err error)
 	TestConnection(ctx context.Context) error
 }
+
+// ZoomMeetingDTO represents an individual meeting in Zoom Pool Manager / NOC API.
+type ZoomMeetingDTO struct {
+	ID                    any            `json:"id"`
+	PublicID              string         `json:"public_id,omitempty"`
+	Title                 string         `json:"title,omitempty"`
+	Topic                 string         `json:"topic,omitempty"`
+	Description           string         `json:"description,omitempty"`
+	MeetingType           string         `json:"meeting_type,omitempty"`
+	Status                string         `json:"status,omitempty"` // scheduled, started, ended, etc.
+	IsLive                bool           `json:"is_live"`
+	StartsAt              string         `json:"starts_at,omitempty"`
+	EndsAt                string         `json:"ends_at,omitempty"`
+	StartTime             string         `json:"start_time,omitempty"`
+	EndTime               string         `json:"end_time,omitempty"`
+	DurationMinutes       int            `json:"duration_minutes,omitempty"`
+	Duration              int            `json:"duration,omitempty"`
+	StartsInMinutes       int            `json:"starts_in_minutes"`
+	EndsInMinutes         int            `json:"ends_in_minutes"`
+	Timezone              string         `json:"timezone,omitempty"`
+	ParticipantCount      int            `json:"participant_count,omitempty"`
+	ParticipantsCount     int            `json:"participants_count,omitempty"`
+	ZoomMeetingID         string         `json:"zoom_meeting_id,omitempty"`
+	MeetingID             string         `json:"meeting_id,omitempty"`
+	JoinURL               string         `json:"join_url,omitempty"`
+	Passcode              string         `json:"passcode,omitempty"`
+	HostKey               any            `json:"host_key,omitempty"`
+	WaitingRoom           bool           `json:"waiting_room,omitempty"`
+	JoinBeforeHost        bool           `json:"join_before_host,omitempty"`
+	JbhTime               int            `json:"jbh_time,omitempty"`
+	RecordingMode         string         `json:"recording_mode,omitempty"`
+	Room                  string         `json:"room,omitempty"`
+	Classroom             string         `json:"classroom,omitempty"`
+	Department            any            `json:"department,omitempty"`
+	HostName              string         `json:"host_name,omitempty"`
+	HostEmail             string         `json:"host_email,omitempty"`
+	AccountName           string         `json:"account_name,omitempty"`
+	AccountEmail          string         `json:"account_email,omitempty"`
+	CustomFields          map[string]any `json:"custom_fields,omitempty"`
+	CustomFieldsFormatted []any          `json:"custom_fields_formatted,omitempty"`
+	Requester             map[string]any `json:"requester,omitempty"`
+	Owner                 map[string]any `json:"owner,omitempty"`
+	HostResource          map[string]any `json:"host_resource,omitempty"`
+	RawData               map[string]any `json:"raw_data,omitempty"`
+}
+
+// ZoomMeetingsResponseDTO represents the full payload returned from the Zoom NOC endpoint.
+type ZoomMeetingsResponseDTO struct {
+	Success       bool             `json:"success"`
+	Timestamp     string           `json:"timestamp"`
+	QueryWindow   map[string]any   `json:"query_window,omitempty"`
+	TotalCount    int              `json:"total_count"`
+	LiveCount     int              `json:"live_count"`
+	UpcomingCount int              `json:"upcoming_count"`
+	Meetings      []ZoomMeetingDTO `json:"meetings"`
+	LastSyncedAt  time.Time        `json:"last_synced_at"`
+	IsStale       bool             `json:"is_stale"`
+}
+
+// ZoomProvider abstracts interaction with the Zoom Pool Manager NOC API.
+type ZoomProvider interface {
+	Name() string
+	GetMeetings(ctx context.Context, params map[string]string) (*ZoomMeetingsResponseDTO, error)
+	GetCachedMeetings() *ZoomMeetingsResponseDTO
+	TestConnection(ctx context.Context) error
+}
+

@@ -29,6 +29,11 @@ import {
   MonitorOff,
   Coffee,
   Moon,
+  Video,
+  Calendar,
+  MapPin,
+  Radio,
+  ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
@@ -36,7 +41,8 @@ import { soundManager } from '../../sound/SoundManager';
 import { useNocWebSocket, WSMessage } from '../../websocket/useNocWebSocket';
 import { SoundUnlockModal } from '../../components/common/SoundUnlockModal';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
-import { Device, Incident, Alarm, DashboardSummary, Endpoint } from '../../types';
+import { ZoomMeetingCard } from '../../components/common/ZoomMeetingCard';
+import { Device, Incident, Alarm, DashboardSummary, Endpoint, ZoomMeeting } from '../../types';
 import { getPrimaryGroup, calculateGroupSummaries } from '../../utils/endpointGroups';
 
 export const DisplayPage: React.FC = () => {
@@ -91,15 +97,22 @@ export const DisplayPage: React.FC = () => {
   const [timeStr, setTimeStr] = useState('');
   const [dateStr, setDateStr] = useState('');
 
-  const pages = ['OVERALL', 'BIOMETRICS', 'NETWORK', 'SERVERS', 'ENDPOINTS', 'INCIDENTS'];
+  const pages = ['OVERALL', 'BIOMETRICS', 'NETWORK', 'SERVERS', 'ENDPOINTS', 'INCIDENTS', 'MEETINGS'];
   const rotationSeconds = 30;
   const [secondsRemaining, setSecondsRemaining] = useState(rotationSeconds);
+  const [wallboardZoomTab, setWallboardZoomTab] = useState<'ALL' | 'IN_PROGRESS' | 'UPCOMING' | 'COMPLETED'>('ALL');
 
   // Real-time Queries
   const { data: summary } = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: api.getSummary,
     refetchInterval: 10000,
+  });
+
+  const { data: zoomData, isLoading: zoomLoading, refetch: refetchZoom } = useQuery({
+    queryKey: ['display-zoom-meetings'],
+    queryFn: () => api.getZoomMeetings({ hours: 48 }),
+    refetchInterval: 15000,
   });
 
   const { data: devices } = useQuery({
@@ -145,7 +158,9 @@ export const DisplayPage: React.FC = () => {
     setIsIdle(false);
     lastInteractionRef.current = Date.now();
 
-    if (msg.type === 'CRITICAL_TAKEOVER') {
+    if (msg.type === 'ZOOM_MEETINGS_UPDATED') {
+      refetchZoom();
+    } else if (msg.type === 'CRITICAL_TAKEOVER') {
       const p = msg.payload as {
         device_name: string;
         location?: string;
@@ -1021,7 +1036,7 @@ export const DisplayPage: React.FC = () => {
               </span>
               <span className="hidden 2xl:inline text-slate-600">•</span>
               <span className="hidden 2xl:inline text-slate-400 font-mono text-[10px]">
-                OpManager 🟢 | Endpoint Central 🟢 | FortiGate 🟢
+                OpManager 🟢 | Endpoint Central 🟢 | FortiGate 🟢 | Zoom {zoomData?.is_stale ? '🟡' : '🟢'}
               </span>
             </div>
           </div>
@@ -1144,7 +1159,7 @@ export const DisplayPage: React.FC = () => {
         {pages[currentPageIndex] === 'OVERALL' && (
           <div className="h-full flex flex-col space-y-3 sm:space-y-4">
             {/* TOP KPI CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 shrink-0">
               <div className="noc-card p-4 rounded-xl border-t-2 border-t-blue-500 bg-[#0a101d]">
                 <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase">
                   <span>Network Infrastructure</span>
@@ -1206,6 +1221,19 @@ export const DisplayPage: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {/* Card 5: Upcoming Zoom Meetings */}
+              <ZoomMeetingCard
+                data={zoomData}
+                isLoading={zoomLoading}
+                onClick={() => {
+                  const idx = pages.indexOf('MEETINGS');
+                  if (idx !== -1) {
+                    setCurrentPageIndex(idx);
+                    setSecondsRemaining(rotationSeconds);
+                  }
+                }}
+              />
             </div>
 
             {/* TRAFFIC & RECENT ALARMS */}
@@ -2109,6 +2137,364 @@ export const DisplayPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* ============================================================== */}
+        {/* VIEW 6: ZOOM MEETINGS WALLBOARD                                */}
+        {/* ============================================================== */}
+        {pages[currentPageIndex] === 'MEETINGS' && (() => {
+          const allMeetings = zoomData?.meetings || [];
+          
+          const isLive = (m: ZoomMeeting): boolean => {
+            if (m.is_live) return true;
+            if (m.status === 'started' || m.status === 'live') return true;
+            if (m.starts_in_minutes !== undefined && m.ends_in_minutes !== undefined) {
+              return m.starts_in_minutes <= 0 && m.ends_in_minutes > 0;
+            }
+            const s = m.starts_at || m.start_time;
+            const e = m.ends_at || m.end_time;
+            if (s && e) {
+              const now = Date.now();
+              return now >= new Date(s).getTime() && now <= new Date(e).getTime();
+            }
+            return false;
+          };
+
+          const isCompleted = (m: ZoomMeeting): boolean => {
+            if (m.status === 'ended' || m.status === 'completed') return true;
+            if (m.ends_in_minutes !== undefined && m.ends_in_minutes <= 0) return true;
+            const e = m.ends_at || m.end_time;
+            if (e) {
+              return Date.now() > new Date(e).getTime();
+            }
+            return false;
+          };
+
+          const isUpcoming = (m: ZoomMeeting): boolean => !isLive(m) && !isCompleted(m);
+
+          const liveList = allMeetings.filter(isLive);
+          const upcomingList = allMeetings.filter(isUpcoming);
+          const completedList = allMeetings.filter(isCompleted);
+
+          let displayList = allMeetings;
+          if (wallboardZoomTab === 'IN_PROGRESS') displayList = liveList;
+          else if (wallboardZoomTab === 'UPCOMING') displayList = upcomingList;
+          else if (wallboardZoomTab === 'COMPLETED') displayList = completedList;
+
+          const now = new Date();
+          const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+          const tomorrowStr = tomorrowDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+          const getDayLabel = (m: ZoomMeeting) => {
+            const timeStr = m.starts_at || m.start_time;
+            if (!timeStr) return 'Today';
+            try {
+              const d = new Date(timeStr);
+              const mDateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+              if (mDateStr === todayStr) return 'Today';
+              if (mDateStr === tomorrowStr) return 'Tomorrow';
+              return d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', month: 'short', day: 'numeric' });
+            } catch {
+              return 'Today';
+            }
+          };
+
+          return (
+            <div className="h-full flex flex-col space-y-3 sm:space-y-4">
+              {/* Top Stats Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 shrink-0">
+                <div 
+                  onClick={() => setWallboardZoomTab('IN_PROGRESS')}
+                  className={`noc-card p-4 rounded-xl border-t-2 border-t-emerald-500 bg-[#0a101d] cursor-pointer transition hover:bg-slate-900/60 ${
+                    wallboardZoomTab === 'IN_PROGRESS' ? 'ring-1 ring-emerald-500/50' : ''
+                  }`}
+                >
+                  <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase">
+                    <span>In Session Now</span>
+                    <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  </div>
+                  <div className="text-3xl font-black text-white font-mono mt-1">
+                    {liveList.length}
+                  </div>
+                  <div className="mt-2 text-xs font-mono text-emerald-400 font-bold border-t border-slate-800/80 pt-2 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    Live In Progress
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setWallboardZoomTab('UPCOMING')}
+                  className={`noc-card p-4 rounded-xl border-t-2 border-t-cyan-500 bg-[#0a101d] cursor-pointer transition hover:bg-slate-900/60 ${
+                    wallboardZoomTab === 'UPCOMING' ? 'ring-1 ring-cyan-500/50' : ''
+                  }`}
+                >
+                  <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase">
+                    <span>Upcoming (Till Tomorrow)</span>
+                    <Calendar className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div className="text-3xl font-black text-white font-mono mt-1">
+                    {upcomingList.length}
+                  </div>
+                  <div className="mt-2 text-xs font-mono text-cyan-400 font-bold border-t border-slate-800/80 pt-2">
+                    Queued in 48h Schedule
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setWallboardZoomTab('COMPLETED')}
+                  className={`noc-card p-4 rounded-xl border-t-2 border-t-slate-500 bg-[#0a101d] cursor-pointer transition hover:bg-slate-900/60 ${
+                    wallboardZoomTab === 'COMPLETED' ? 'ring-1 ring-slate-500/50' : ''
+                  }`}
+                >
+                  <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase">
+                    <span>Completed Sessions</span>
+                    <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div className="text-3xl font-black text-white font-mono mt-1">
+                    {completedList.length}
+                  </div>
+                  <div className="mt-2 text-xs font-mono text-slate-400 font-bold border-t border-slate-800/80 pt-2">
+                    Concluded & Archived
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setWallboardZoomTab('ALL')}
+                  className={`noc-card p-4 rounded-xl border-t-2 border-t-purple-500 bg-[#0a101d] cursor-pointer transition hover:bg-slate-900/60 ${
+                    wallboardZoomTab === 'ALL' ? 'ring-1 ring-purple-500/50' : ''
+                  }`}
+                >
+                  <div className="flex justify-between items-center text-slate-400 text-xs font-bold uppercase">
+                    <span>Pool Endpoint Status</span>
+                    <Shield className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div className="text-2xl font-black text-white font-mono mt-1">
+                    {zoomData?.is_stale ? 'DATA STALE' : 'LIVE FEED'}
+                  </div>
+                  <div className="mt-2 text-xs font-mono text-slate-400 border-t border-slate-800/80 pt-2 flex items-center justify-between">
+                    <span>Total {allMeetings.length} Sessions</span>
+                    <span className="text-emerald-400 font-bold">200 OK</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Meetings Table / Wallboard Grid */}
+              <div className="flex-1 min-h-0 bg-[#0a101d] rounded-xl border border-slate-800 p-4 flex flex-col justify-between">
+                <div className="flex-1 flex flex-col min-h-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800 mb-3 shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                        <Video className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white tracking-wide">
+                          KREA Campus Scheduled & Live Zoom Meetings
+                        </h3>
+                        <p className="text-[11px] text-slate-400">
+                          Autonomous NOC telemetry monitor polled from Zoom Pool Manager
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Interactive Tab Selectors for Wallboard */}
+                    <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                      <button
+                        onClick={() => setWallboardZoomTab('ALL')}
+                        className={`px-3 py-1 rounded text-xs font-bold transition ${
+                          wallboardZoomTab === 'ALL'
+                            ? 'bg-slate-700 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        All ({allMeetings.length})
+                      </button>
+                      <button
+                        onClick={() => setWallboardZoomTab('IN_PROGRESS')}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition ${
+                          wallboardZoomTab === 'IN_PROGRESS'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-emerald-400 hover:text-emerald-300'
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                        In Progress ({liveList.length})
+                      </button>
+                      <button
+                        onClick={() => setWallboardZoomTab('UPCOMING')}
+                        className={`px-3 py-1 rounded text-xs font-bold transition ${
+                          wallboardZoomTab === 'UPCOMING'
+                            ? 'bg-cyan-600 text-white shadow-sm'
+                            : 'text-cyan-400 hover:text-cyan-300'
+                        }`}
+                      >
+                        Upcoming Till Tomorrow ({upcomingList.length})
+                      </button>
+                      <button
+                        onClick={() => setWallboardZoomTab('COMPLETED')}
+                        className={`px-3 py-1 rounded text-xs font-bold transition ${
+                          wallboardZoomTab === 'COMPLETED'
+                            ? 'bg-slate-700 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        Completed ({completedList.length})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Meetings List */}
+                  <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                    {displayList.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+                        {displayList.map((m: ZoomMeeting, idx: number) => {
+                          const live = isLive(m);
+                          const done = isCompleted(m);
+                          const dayLabel = getDayLabel(m);
+                          const title = m.title || m.topic || 'Zoom Meeting Session';
+                          const room = m.custom_fields?.class_room || m.room || m.classroom;
+                          const host = m.requester?.name || m.host_resource?.name || m.host_name || m.host_email;
+                          const meetingId = m.zoom_meeting_id || m.meeting_id || m.id;
+                          const startTime = m.starts_at || m.start_time;
+                          const endTime = m.ends_at || m.end_time;
+                          const duration = m.duration_minutes || m.duration;
+
+                          return (
+                            <div
+                              key={m.public_id || m.id || meetingId || idx}
+                              className={`p-4 rounded-xl border transition-all flex flex-col justify-between ${
+                                live
+                                  ? 'bg-emerald-950/25 border-emerald-500/50 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500/30'
+                                  : done
+                                  ? 'bg-slate-900/40 border-slate-800/80 opacity-75'
+                                  : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-start justify-between gap-2 mb-2.5">
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="text-sm font-bold text-slate-100 line-clamp-2">
+                                      {title}
+                                    </h4>
+                                    <span className="text-[10px] font-mono text-slate-400 font-semibold mt-0.5 inline-block">
+                                      {dayLabel}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase font-mono tracking-wider shrink-0 ${
+                                      live
+                                        ? 'bg-emerald-500 text-slate-950 animate-pulse'
+                                        : done
+                                        ? 'bg-slate-800 text-slate-400 border border-slate-700'
+                                        : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                    }`}
+                                  >
+                                    {live ? 'IN PROGRESS' : done ? 'COMPLETED' : 'UPCOMING'}
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2 text-xs text-slate-300">
+                                  <div className="flex items-center gap-2 text-slate-300 font-mono text-[11px] bg-slate-950/60 p-2 rounded-lg border border-slate-850">
+                                    <Clock className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                                    <span className="font-bold text-slate-100">
+                                      {startTime
+                                        ? new Date(startTime).toLocaleTimeString('en-IN', {
+                                            timeZone: 'Asia/Kolkata',
+                                            hour12: false,
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : '--:--'}{' '}
+                                      -{' '}
+                                      {endTime
+                                        ? new Date(endTime).toLocaleTimeString('en-IN', {
+                                            timeZone: 'Asia/Kolkata',
+                                            hour12: false,
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })
+                                        : '--:--'}{' '}
+                                      IST
+                                    </span>
+                                    {duration && (
+                                      <span className="text-slate-400 font-medium">({duration}m)</span>
+                                    )}
+                                    {live && m.ends_in_minutes !== undefined && m.ends_in_minutes > 0 && (
+                                      <span className="ml-auto text-emerald-400 text-[10px] font-bold">
+                                        Ends in {m.ends_in_minutes}m
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {room && (
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-200">
+                                      <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                      <span className="font-medium truncate">{room}</span>
+                                    </div>
+                                  )}
+
+                                  {host && (
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400 truncate">
+                                      <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                      <span className="truncate">
+                                        Host: <strong className="text-slate-300 font-semibold">{host}</strong>
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="mt-3.5 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono">
+                                <span className="text-slate-400">
+                                  ID: <strong className="text-cyan-300">{meetingId || '--'}</strong>
+                                </span>
+                                {m.join_url ? (
+                                  <a
+                                    href={m.join_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-sans text-xs font-bold"
+                                  >
+                                    <span>{live ? 'Join Live' : 'Open Link'}</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-500 text-[10px]">Pool Protected</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center py-20 text-center">
+                        <div className="w-16 h-16 rounded-2xl bg-cyan-950/40 border border-cyan-800/40 flex items-center justify-center text-cyan-400 mb-3 shadow-inner">
+                          <Calendar className="w-8 h-8" />
+                        </div>
+                        <h4 className="text-base font-bold text-slate-200">
+                          {wallboardZoomTab === 'IN_PROGRESS'
+                            ? 'No Zoom Meetings In Progress Right Now'
+                            : wallboardZoomTab === 'UPCOMING'
+                            ? 'No Upcoming Meetings Scheduled Till Tomorrow'
+                            : wallboardZoomTab === 'COMPLETED'
+                            ? 'No Completed Meetings Recorded'
+                            : 'No Scheduled Meetings Found in Window'}
+                        </h4>
+                        <p className="text-xs text-slate-500 max-w-md mt-1.5 leading-relaxed">
+                          Autonomous NOC Wallboard feed is continuously monitoring the Zoom Pool API (polling every 15s). New sessions will appear automatically.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-mono text-slate-400 shrink-0">
+                  <span>Endpoint: <strong className="text-slate-300">https://zoom.krea.edu.in/api/v1/noc/meetings</strong></span>
+                  <span className="text-cyan-400 font-bold">Schedule Window: Next 48 Hours (Today & Tomorrow)</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </main>
 
       <SoundUnlockModal isOpen={soundModalOpen} onClose={() => setSoundModalOpen(false)} />

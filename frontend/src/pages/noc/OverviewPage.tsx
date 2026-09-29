@@ -25,6 +25,8 @@ import {
   Monitor,
   RefreshCw,
   TrendingUp,
+  Video,
+  Calendar,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { DeviceDrawer } from '../../components/common/DeviceDrawer';
@@ -82,6 +84,12 @@ export const OverviewPage: React.FC = () => {
     queryKey: ['endpoints-overview'],
     queryFn: () => api.getEndpoints(),
     refetchInterval: 30000,
+  });
+
+  const { data: zoomData } = useQuery({
+    queryKey: ['overview-zoom-meetings'],
+    queryFn: () => api.getZoomMeetings({ to_time: '23:59:59' }),
+    refetchInterval: 15000,
   });
 
   // Dynamic live rolling bandwidth buffer
@@ -374,7 +382,8 @@ export const OverviewPage: React.FC = () => {
     { name: 'FortiGate 600F Firewall', status: 'OPERATIONAL', metric: 'SD-WAN Active', ping: '2ms' },
     { name: 'ManageEngine OpManager', status: 'OPERATIONAL', metric: 'SNMP/API Live', ping: '3ms' },
     { name: 'Active Directory & DNS', status: 'OPERATIONAL', metric: 'AD01 / AD02 Sync', ping: '1ms' },
-  ], [summary]);
+    { name: 'Zoom Pool Manager (NOC Feed)', status: zoomData?.is_stale ? 'DEGRADED' : 'OPERATIONAL', metric: `${zoomData?.live_count ?? 0} Live / ${zoomData?.upcoming_count ?? 0} Queued`, ping: '15ms' },
+  ], [summary, zoomData]);
 
   // Compute live severity counts from incidents and alarms
   const severityCounts = useMemo(() => {
@@ -442,8 +451,8 @@ export const OverviewPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. TOP METRIC CARDS ROW (7 Compact Cards matching screenshot) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
+      {/* 1. TOP METRIC CARDS ROW (Compact Cards matching wallboard and console) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-2.5 sm:gap-3">
         {/* Sites / ILL */}
         <div
           onClick={() => navigate('/noc/network?category=ILL')}
@@ -597,6 +606,29 @@ export const OverviewPage: React.FC = () => {
             <span className="text-purple-400 font-bold">
               {summary?.biometrics_total ? ((summary.biometrics_up / Math.max(1, summary.biometrics_total)) * 100).toFixed(1) : '95.5'}%
             </span>
+          </div>
+        </div>
+
+        {/* Zoom Meetings */}
+        <div
+          onClick={() => navigate('/display')}
+          className="noc-card p-3 rounded-xl cursor-pointer hover:border-cyan-500/60 transition-all border-t-2 border-t-cyan-500 flex flex-col justify-between"
+          title="Click to view full NOC Zoom Wallboard"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Zoom Pool</span>
+            <Video className="w-3.5 h-3.5 text-cyan-400" />
+          </div>
+          <div className="my-1.5 flex items-baseline gap-1.5">
+            <span className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+              {zoomData?.upcoming_count ?? 0}
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">Upcoming</span>
+          </div>
+          <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-800/80 pt-1.5 text-slate-400">
+            <span className="text-emerald-400 font-bold">{zoomData?.live_count ?? 0} Live</span>
+            <span className="text-cyan-400">{zoomData?.total_count ?? 0} Today</span>
+            <span className="text-slate-500">{zoomData?.is_stale ? 'Stale' : '200 OK'}</span>
           </div>
         </div>
       </div>

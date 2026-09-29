@@ -24,6 +24,7 @@ import (
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/endpointcentral"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/fortigate"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/opmanager"
+	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/zoom"
 	"github.com/Krea-University/noc-dashboard/backend/internal/sound"
 	"github.com/Krea-University/noc-dashboard/backend/internal/websocket"
 )
@@ -95,6 +96,7 @@ func main() {
 	var nms integrations.NMSProvider
 	var epc integrations.EndpointProvider
 	var fg integrations.FirewallProvider
+	var zm integrations.ZoomProvider
 
 	if cfg.MockMode || cfg.OpManagerAPIKey == "" {
 		slog.Info("running with OpManager MockProvider (realistic simulation mode)")
@@ -120,6 +122,14 @@ func main() {
 		fg = fortigate.NewClient(cfg)
 	}
 
+	if cfg.MockMode && cfg.ZoomNOCToken == "" {
+		slog.Info("running with Zoom MockProvider (offline simulation)")
+		zm = zoom.NewMockProvider()
+	} else {
+		slog.Info("running with live Zoom Pool Manager Client", "url", cfg.ZoomNOCURL)
+		zm = zoom.NewClient(cfg)
+	}
+
 	// 6. Automation Pipeline
 	vlanPipeline := automation.NewPipeline(db, fg, auditSvc, wsHub)
 	syncEngine := automation.NewSyncReconciliationEngine(db, nms, epc, fg, auditSvc, wsHub)
@@ -135,7 +145,7 @@ func main() {
 	}()
 
 	// 7. Background Collectors
-	collectorManager := collectors.NewManager(cfg, db, eventsEngine, nms, epc, fg)
+	collectorManager := collectors.NewManager(cfg, db, eventsEngine, nms, epc, fg, zm, wsHub)
 	collectorManager.Start()
 	defer collectorManager.Stop()
 
@@ -153,6 +163,7 @@ func main() {
 		NMSProvider:  nms,
 		EPCProvider:  epc,
 		FGProvider:   fg,
+		ZoomProvider: zm,
 	}
 
 	handler := api.SetupRouter(routerDeps)

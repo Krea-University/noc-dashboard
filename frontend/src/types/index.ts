@@ -528,7 +528,85 @@ export interface BackendVersionInfo {
   uptime_seconds: number;
 }
 
+export interface ZoomMeeting {
+  id?: string | number;
+  public_id?: string;
+  topic?: string;
+  title?: string;
+  description?: string;
+  meeting_type?: string;
+  status?: string; // 'scheduled' | 'started' | 'ended' | 'live'
+  is_live?: boolean;
+  starts_at?: string;
+  ends_at?: string;
+  start_time?: string;
+  end_time?: string;
+  duration_minutes?: number;
+  duration?: number;
+  starts_in_minutes?: number;
+  ends_in_minutes?: number;
+  timezone?: string;
+  participant_count?: number;
+  participants_count?: number;
+  zoom_meeting_id?: string;
+  meeting_id?: string;
+  join_url?: string;
+  passcode?: string;
+  host_key?: string | null;
+  waiting_room?: boolean;
+  join_before_host?: boolean;
+  jbh_time?: number;
+  recording_mode?: string;
+  room?: string;
+  classroom?: string;
+  department?: string | null;
+  host_name?: string;
+  host_email?: string;
+  account_name?: string;
+  account_email?: string;
+  custom_fields?: Record<string, any>;
+  custom_fields_formatted?: Array<{
+    key?: string;
+    name?: string;
+    type?: string;
+    value?: any;
+  }>;
+  requester?: {
+    id?: number;
+    name?: string;
+    email?: string;
+  };
+  owner?: {
+    id?: number;
+    name?: string;
+    email?: string;
+  };
+  host_resource?: {
+    id?: number;
+    name?: string;
+    email?: string;
+  };
+  raw_data?: Record<string, any>;
+}
+
+export interface ZoomMeetingsResponse {
+  success: boolean;
+  timestamp: string;
+  query_window?: {
+    from: string;
+    to: string;
+    hours_span: number;
+  };
+  total_count: number;
+  live_count: number;
+  upcoming_count: number;
+  meetings: ZoomMeeting[];
+  last_synced_at?: string;
+  is_stale?: boolean;
+}
+
 declare global {
   const __APP_BUILD_ID__: string;
   const __APP_VERSION__: string;
 }
+
