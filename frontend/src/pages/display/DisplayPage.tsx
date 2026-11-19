@@ -42,6 +42,7 @@ import { useNocWebSocket, WSMessage } from '../../websocket/useNocWebSocket';
 import { SoundUnlockModal } from '../../components/common/SoundUnlockModal';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { ZoomMeetingCard } from '../../components/common/ZoomMeetingCard';
+import { ErpBiometricTvStrip } from '../../components/biometrics/ErpBiometricTvStrip';
 import { Device, Incident, Alarm, DashboardSummary, Endpoint, ZoomMeeting } from '../../types';
 import { getPrimaryGroup, calculateGroupSummaries } from '../../utils/endpointGroups';
 
@@ -1740,6 +1741,9 @@ export const DisplayPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Krea OneERP counts (no personal data) */}
+            <ErpBiometricTvStrip />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-1 min-h-0">
               {/* Left Column: Donut & Building Breakdown */}

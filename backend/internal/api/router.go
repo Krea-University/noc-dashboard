@@ -47,6 +47,7 @@ type RouterDeps struct {
 	EPCProvider  integrations.EndpointProvider
 	FGProvider   integrations.FirewallProvider
 	ZoomProvider integrations.ZoomProvider
+	ERPBiometric integrations.ERPBiometricProvider // nil when the ERP feed is off
 }
 
 // SetupRouter constructs the Chi router with middleware, security headers, and routes.
@@ -166,6 +167,9 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		// Zoom Meetings Integration (Read-Only)
 		api.Get("/api/zoom/meetings", handleGetZoomMeetings(deps))
 
+		// Krea OneERP biometric status (device data and face counts, no personal data)
+		api.Get("/api/erp/biometrics", handleGetERPBiometrics(deps))
+
 		// NOC Displays
 		api.Get("/api/displays", handleListDisplays(deps))
 		api.Post("/api/displays/heartbeat", handleDisplayHeartbeat(deps))
@@ -182,6 +186,9 @@ func SetupRouter(deps *RouterDeps) http.Handler {
 		api.Use(rbac.RequireAuth(deps.AuthSvc))
 
 		api.Get("/api/me", handleMe(deps))
+
+		// People without a usable face (personal data: full operator sessions only, audited)
+		api.Get("/api/erp/biometrics/faceless", handleGetERPFaceless(deps))
 
 		// Operator Actions & Alarm Management
 		api.Post("/api/alarms/{id}/acknowledge", handleAcknowledgeAlarm(deps))

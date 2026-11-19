@@ -54,6 +54,7 @@
 | **ManageEngine OpManager** | Switches, Routers, Servers, Biometrics, Alarms | `https://nms.krea.edu.in` | API Key (`85eb500a1fee0a071a96b66f4a3559a4`) | Active |
 | **ManageEngine Endpoint Central** | Workstations, Laptops, OS & Security Patch Telemetry | `https://endpointcentral.krea.edu.in:8383` | API Key (`9D1A8504-33DB-445E-ADDD-0832D5932837`) | Active |
 | **FortiGate 600F Firewall** | SD-WAN WAN Links, VLAN Policies, Throughput | `https://sc-firewall.krea.edu.in:5551` | REST API Token (`r3kr50qtjww0n4k8Ny6wbNzs5bkghH`) | **100% Verified Live** |
+| **Krea OneERP (biometrics)** | Attendance health per reader (ERP status, outages, ZK portal state, area), faces to re-capture | `https://api.oneerp.krea.edu.in/v2/noc/biometric/*` | Bearer token (`ERP_NOC_TOKEN` env only, same value as the ERP's `NOC_API_TOKEN`) | New. Read-only. The faceless list is personal data: operator console only, audited, never on wall displays |
 
 ### FortiOS Administrator Profile (`NOC_Monitor_Profile`)
 Configured on **`KREA-UNIV-FW`** (FortiGate 600F, FortiOS `v7.4.11`, build 2878):

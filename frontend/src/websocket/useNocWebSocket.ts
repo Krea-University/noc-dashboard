@@ -66,6 +66,8 @@ export function useNocWebSocket(onMessage?: (msg: WSMessage) => void) {
         } else if (msg.type === 'VLAN_UPDATED' || msg.type === 'ACTION_COMPLETED') {
           qc.invalidateQueries({ queryKey: ['vlans'] });
           qc.invalidateQueries({ queryKey: ['actions'] });
+        } else if (msg.type === 'ERP_BIOMETRICS_UPDATED') {
+          qc.invalidateQueries({ queryKey: ['erp-biometrics'] });
         }
 
         if (onMessageRef.current) {
