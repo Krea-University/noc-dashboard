@@ -56,6 +56,12 @@ type Config struct {
 	ZoomNOCToken               string
 	PollZoomMeetingsInterval   time.Duration
 
+	// Krea OneERP biometric NOC API (read-only)
+	ERPNOCBaseURL            string
+	ERPNOCToken              string
+	PollERPBiometricInterval time.Duration
+	PollERPFacelessInterval  time.Duration
+
 	// Polling Intervals
 	PollOpManagerDevicesInterval time.Duration
 	PollOpManagerAlarmsInterval  time.Duration
@@ -141,6 +147,11 @@ func Load(envPath string) (*Config, error) {
 		ZoomNOCURL:               getEnv("ZOOM_NOC_URL", "https://zoom.krea.edu.in/api/v1/noc/meetings"),
 		ZoomNOCToken:             getEnv("ZOOM_NOC_TOKEN", ""),
 		PollZoomMeetingsInterval: time.Duration(getEnvInt("POLL_ZOOM_MEETINGS_SECONDS", 30)) * time.Second,
+
+		ERPNOCBaseURL:            getEnv("ERP_NOC_BASE_URL", "https://api.oneerp.krea.edu.in"),
+		ERPNOCToken:              getEnv("ERP_NOC_TOKEN", ""),
+		PollERPBiometricInterval: time.Duration(getEnvInt("POLL_ERP_BIOMETRIC_SECONDS", 60)) * time.Second,
+		PollERPFacelessInterval:  time.Duration(getEnvInt("POLL_ERP_FACELESS_SECONDS", 900)) * time.Second,
 
 		PollOpManagerDevicesInterval: time.Duration(getEnvInt("POLL_OPMANAGER_DEVICES_SECONDS", 60)) * time.Second,
 		PollOpManagerAlarmsInterval:  time.Duration(getEnvInt("POLL_OPMANAGER_ALARMS_SECONDS", 30)) * time.Second,

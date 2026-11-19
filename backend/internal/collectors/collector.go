@@ -27,9 +27,16 @@ type CollectorManager struct {
 	epcProvider  integrations.EndpointProvider
 	fgProvider   integrations.FirewallProvider
 	zoomProvider integrations.ZoomProvider
+	erpProvider  integrations.ERPBiometricProvider
 	wsHub        *websocket.Hub
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
+}
+
+// SetERPBiometricProvider enables the Krea OneERP biometric collector. Call
+// before Start; nil leaves it off.
+func (m *CollectorManager) SetERPBiometricProvider(p integrations.ERPBiometricProvider) {
+	m.erpProvider = p
 }
 
 // NewManager creates a new background collector manager.
@@ -75,6 +82,11 @@ func (m *CollectorManager) Start() {
 	if m.zoomProvider != nil {
 		m.wg.Add(1)
 		go m.runZoomCollector()
+	}
+
+	if m.erpProvider != nil {
+		m.wg.Add(1)
+		go m.runERPBiometricCollector()
 	}
 }
 
@@ -427,6 +439,8 @@ func (m *CollectorManager) updateIntegrationStatus(integrationType, status, erro
 		baseURL = m.cfg.EndpointCentralURL
 	case "fortigate":
 		baseURL = m.cfg.FortiGateURL
+	case "erp":
+		baseURL = m.cfg.ERPNOCBaseURL
 	}
 
 	if status == "CONNECTED" {

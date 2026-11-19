@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { DeviceDrawer } from '../../components/common/DeviceDrawer';
+import { ErpBiometricPanel } from '../../components/biometrics/ErpBiometricPanel';
 import { Device } from '../../types';
 
 export const BiometricsPage: React.FC = () => {
@@ -164,6 +165,9 @@ export const BiometricsPage: React.FC = () => {
       });
   }, [filtered]);
 
+  // OpManager IPs, so the ERP panel can flag readers OpManager does not monitor
+  const opmanagerIps = useMemo(() => new Set((biometrics || []).map((b) => b.ip_address)), [biometrics]);
+
   const total = biometrics?.length || 0;
   const upCount = biometrics?.filter((b) => b.status === 'UP').length || 0;
   const downCount = biometrics?.filter((b) => b.status === 'DOWN').length || 0;
@@ -231,6 +235,9 @@ export const BiometricsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Krea OneERP attendance health (ERP status, outages, ZK portal, faces) */}
+      <ErpBiometricPanel opmanagerIps={opmanagerIps} />
 
       {/* Control Strip: Filters & Search */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">

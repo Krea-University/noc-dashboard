@@ -22,6 +22,7 @@ import (
 	"github.com/Krea-University/noc-dashboard/backend/internal/events"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/endpointcentral"
+	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/erpbiometric"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/fortigate"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/opmanager"
 	"github.com/Krea-University/noc-dashboard/backend/internal/integrations/zoom"
@@ -146,6 +147,22 @@ func main() {
 
 	// 7. Background Collectors
 	collectorManager := collectors.NewManager(cfg, db, eventsEngine, nms, epc, fg, zm, wsHub)
+
+	// Krea OneERP biometric feed: live with a token, mock in mock mode, else off.
+	var erpBio integrations.ERPBiometricProvider
+	switch {
+	case cfg.ERPNOCToken != "":
+		slog.Info("running with live Krea OneERP biometric client", "url", cfg.ERPNOCBaseURL)
+		erpBio = erpbiometric.NewClient(cfg)
+	case cfg.MockMode:
+		slog.Info("running with Krea OneERP biometric MockProvider")
+		erpBio = erpbiometric.NewMockProvider()
+	default:
+		slog.Info("Krea OneERP biometric feed disabled (ERP_NOC_TOKEN not set)")
+	}
+	if erpBio != nil {
+		collectorManager.SetERPBiometricProvider(erpBio)
+	}
 	collectorManager.Start()
 	defer collectorManager.Stop()
 
@@ -164,6 +181,7 @@ func main() {
 		EPCProvider:  epc,
 		FGProvider:   fg,
 		ZoomProvider: zm,
+		ERPBiometric: erpBio,
 	}
 
 	handler := api.SetupRouter(routerDeps)

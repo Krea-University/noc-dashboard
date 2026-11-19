@@ -3,7 +3,7 @@ import {
   VLAN, ActionJob, ImpactEstimate, AuditLog, SoundProfile,
   DisplayDevice, DashboardSummary, ProblemDevice, AvailabilityReport,
   VlanLogsReportResponse, SyncPreviewResult, SyncExecuteRequest, SyncExecuteResult,
-  ZoomMeetingsResponse,
+  ZoomMeetingsResponse, ErpBiometricSnapshot, ErpFacelessList,
 } from '../types';
 
 const API_BASE = '/api';
@@ -114,6 +114,10 @@ export const api = {
 
   // Biometrics
   getBiometrics: () => request<Device[]>('/biometrics'),
+
+  // Krea OneERP biometric feed (snapshot has no personal data; faceless list is operator-only)
+  getErpBiometrics: () => request<ErpBiometricSnapshot>('/erp/biometrics'),
+  getErpFaceless: () => request<ErpFacelessList>('/erp/biometrics/faceless'),
   getBiometric: (id: string) => request<Device>(`/biometrics/${id}`),
   updateBiometricMetadata: (id: string, meta: Record<string, unknown>) =>
     request<{ status: string }>(`/biometrics/${id}/metadata`, {

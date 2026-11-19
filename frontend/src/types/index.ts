@@ -605,6 +605,81 @@ export interface ZoomMeetingsResponse {
   is_stale?: boolean;
 }
 
+// Krea OneERP biometric feed (GET /api/erp/biometrics). No personal data.
+export interface ErpZkTerminal {
+  terminal_id: number;
+  alias: string;
+  online: boolean;
+  last_activity: string;
+  area: string;
+  user_count: number;
+  fp_count: number;
+  face_count: number;
+  firmware: string;
+}
+
+export interface ErpBiometricDevice {
+  device_id: string;
+  name: string;
+  type: string;
+  ip: string;
+  serial: string;
+  rooms: string;
+  status: 'online' | 'offline';
+  last_sync: string;
+  down_since: string; // '' = no open outage
+  zk: ErpZkTerminal | null; // null = not linked to a ZK terminal
+}
+
+export interface ErpFacelessSummary {
+  total: number;
+  no_face: number;
+  old_face_template: number;
+  students: number;
+  staff: number;
+  not_in_erp: number;
+}
+
+export interface ErpBiometricSnapshot {
+  enabled: boolean;
+  generated_at?: string;
+  summary?: {
+    total: number;
+    online: number;
+    offline: number;
+    open_outages: number;
+    zk_online: number;
+    zk_offline: number;
+  };
+  devices: ErpBiometricDevice[];
+  zk_error?: string;
+  faceless?: { as_of: string; summary: ErpFacelessSummary; error: string };
+  fetched_at?: string;
+  is_stale?: boolean;
+  error?: string;
+}
+
+// GET /api/erp/biometrics/faceless. Personal data: operator console only.
+export interface ErpFacelessPerson {
+  biometric_id: string;
+  name: string;
+  code: string; // roll no or employee id
+  type: 'student' | 'staff' | 'not_in_erp';
+  reason: 'no_face' | 'old_face_template';
+  zk_face: string;
+}
+
+export interface ErpFacelessList {
+  enabled: boolean;
+  as_of?: string;
+  summary?: ErpFacelessSummary;
+  people: ErpFacelessPerson[];
+  source_error?: string;
+  fetched_at?: string;
+  is_stale?: boolean;
+  error?: string;
+}
+
 declare global {
   const __APP_BUILD_ID__: string;
   const __APP_VERSION__: string;

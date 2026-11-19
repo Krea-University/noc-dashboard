@@ -205,3 +205,99 @@ type ZoomProvider interface {
 	TestConnection(ctx context.Context) error
 }
 
+
+// ERPZKTerminalDTO is a biometric device's terminal on the ZK (easy TimePro)
+// portal, as reported by the Krea OneERP NOC API.
+type ERPZKTerminalDTO struct {
+	TerminalID   int64  `json:"terminal_id"`
+	Alias        string `json:"alias"`
+	Online       bool   `json:"online"`
+	LastActivity string `json:"last_activity"`
+	Area         string `json:"area"`
+	UserCount    int64  `json:"user_count"`
+	FPCount      int64  `json:"fp_count"`
+	FaceCount    int64  `json:"face_count"`
+	Firmware     string `json:"firmware"`
+}
+
+// ERPBiometricDeviceDTO is one biometric device from the Krea OneERP NOC API.
+// DeviceID is the stable key; IP joins it to OpManager devices.
+type ERPBiometricDeviceDTO struct {
+	DeviceID  string            `json:"device_id"`
+	Name      string            `json:"name"`
+	Type      string            `json:"type"`
+	IP        string            `json:"ip"`
+	Serial    string            `json:"serial"`
+	Rooms     string            `json:"rooms"`
+	Status    string            `json:"status"` // online | offline
+	LastSync  string            `json:"last_sync"`
+	DownSince string            `json:"down_since"` // "" = no open outage
+	ZK        *ERPZKTerminalDTO `json:"zk"`         // nil = not linked to a ZK terminal
+}
+
+// ERPFacelessSummaryDTO counts the people the ZK portal has no usable face
+// for. Counts only: safe for wall displays.
+type ERPFacelessSummaryDTO struct {
+	Total           int `json:"total"`
+	NoFace          int `json:"no_face"`
+	OldFaceTemplate int `json:"old_face_template"`
+	Students        int `json:"students"`
+	Staff           int `json:"staff"`
+	NotInERP        int `json:"not_in_erp"`
+}
+
+// ERPBiometricSnapshotDTO is GET /v2/noc/biometric/devices plus the NOC's own
+// fetch state. It carries no personal data.
+type ERPBiometricSnapshotDTO struct {
+	GeneratedAt string `json:"generated_at"`
+	Summary     struct {
+		Total       int `json:"total"`
+		Online      int `json:"online"`
+		Offline     int `json:"offline"`
+		OpenOutages int `json:"open_outages"`
+		ZKOnline    int `json:"zk_online"`
+		ZKOffline   int `json:"zk_offline"`
+	} `json:"summary"`
+	Devices  []ERPBiometricDeviceDTO `json:"devices"`
+	ZKError  string                  `json:"zk_error"`
+	Faceless struct {
+		AsOf    string                `json:"as_of"`
+		Summary ERPFacelessSummaryDTO `json:"summary"`
+		Error   string                `json:"error"`
+	} `json:"faceless"`
+	FetchedAt time.Time `json:"fetched_at"`
+	IsStale   bool      `json:"is_stale"`
+	Error     string    `json:"error,omitempty"`
+}
+
+// ERPFacelessPersonDTO is one person without a usable face. Personal data:
+// operator console only, never wall displays or logs.
+type ERPFacelessPersonDTO struct {
+	BiometricID string `json:"biometric_id"`
+	Name        string `json:"name"`
+	Code        string `json:"code"`   // roll no or employee id
+	Type        string `json:"type"`   // student | staff | not_in_erp
+	Reason      string `json:"reason"` // no_face | old_face_template
+	ZKFace      string `json:"zk_face"`
+}
+
+// ERPFacelessListDTO is GET /v2/noc/biometric/faceless plus the NOC's fetch state.
+type ERPFacelessListDTO struct {
+	AsOf      string                 `json:"as_of"`
+	Summary   ERPFacelessSummaryDTO  `json:"summary"`
+	People    []ERPFacelessPersonDTO `json:"people"`
+	SourceErr string                 `json:"source_error"`
+	FetchedAt time.Time              `json:"fetched_at"`
+	IsStale   bool                   `json:"is_stale"`
+	Error     string                 `json:"error,omitempty"`
+}
+
+// ERPBiometricProvider abstracts the Krea OneERP biometric NOC API (read-only).
+type ERPBiometricProvider interface {
+	Name() string
+	GetDevices(ctx context.Context) (*ERPBiometricSnapshotDTO, error)
+	GetCachedDevices() *ERPBiometricSnapshotDTO
+	GetFaceless(ctx context.Context) (*ERPFacelessListDTO, error)
+	GetCachedFaceless() *ERPFacelessListDTO
+	TestConnection(ctx context.Context) error
+}
